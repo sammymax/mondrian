@@ -179,8 +179,8 @@
           Math.pow(rectCenterY - canvasCenterY, 2)
         );
         
-        // Painterliness: 1 at center, 0 at edges
-        const painterliness = 1 - (dist / maxDist);
+        // Painterliness: 1 at center, 0 at edges (squared for sharper falloff)
+        const painterliness = Math.pow(1 - (dist / maxDist), 2);
         
         // Single watercolor layer with params scaled by painterliness
         brush.fill(baseColor, 150);
