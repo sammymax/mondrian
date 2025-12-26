@@ -138,26 +138,40 @@
         }
       }
       
-      // Color blocks
+      // Color blocks via quadtree subdivision
       const colorKeys = ['red', 'yellow', 'blue', 'red', 'yellow', 'blue', 'black', 'lightBlue'];
-      const numBlocks = 20;
       const blocks = [];
       
-      for (let i = 0; i < numBlocks; i++) {
-        const w = 50 + random() * 130;
-        const h = 50 + random() * 130;
-        const x = 15 + random() * (width - w - 30);
-        const y = 15 + random() * (height - h - 30);
-        const col = colorKeys[Math.floor(random() * colorKeys.length)];
+      function subdivide(x, y, w, h) {
+        const minSide = Math.min(w, h);
         
-        let overlap = false;
-        for (const b of blocks) {
-          const ox = Math.max(0, Math.min(x + w, b.x + b.w) - Math.max(x, b.x));
-          const oy = Math.max(0, Math.min(y + h, b.y + b.h) - Math.max(y, b.y));
-          if (ox * oy > w * h * 0.6) { overlap = true; break; }
+        // Probability of division based on side length
+        let prob;
+        if (minSide >= 200) {
+          prob = 1;
+        } else if (minSide <= 20) {
+          prob = 0;
+        } else {
+          prob = (minSide - 20) / (200 - 20);
         }
-        if (!overlap) blocks.push({ x, y, w, h, col });
+        
+        if (random() < prob) {
+          // Divide into 4 quadrants
+          const midX = x + w / 2;
+          const midY = y + h / 2;
+          subdivide(x, y, w / 2, h / 2);
+          subdivide(midX, y, w / 2, h / 2);
+          subdivide(x, midY, w / 2, h / 2);
+          subdivide(midX, midY, w / 2, h / 2);
+        } else {
+          // Terminal node - add as block
+          const col = colorKeys[Math.floor(random() * colorKeys.length)];
+          blocks.push({ x, y, w, h, col });
+        }
       }
+      
+      // Start with full canvas
+      subdivide(0, 0, width, height);
       
       // Draw color blocks - watercolor params scaled by distance from center
       brush.noStroke();
