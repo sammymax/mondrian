@@ -54,10 +54,74 @@
     const initialSeed = urlParams.get('seed') ? parseInt(urlParams.get('seed')) : Date.now();
     debugLog(`Initial seed: ${initialSeed}`);
     
+    let swirlShader;
+    
+    const swirlVert = `
+      attribute vec3 aPosition;
+      attribute vec2 aTexCoord;
+      varying vec2 vTexCoord;
+      void main() {
+        vTexCoord = aTexCoord;
+        vec4 positionVec4 = vec4(aPosition, 1.0);
+        positionVec4.xy = positionVec4.xy * 2.0 - 1.0;
+        gl_Position = positionVec4;
+      }
+    `;
+    
+    const swirlFrag = `
+      precision mediump float;
+      varying vec2 vTexCoord;
+      uniform sampler2D uTexture;
+      uniform float uSwirlStrength;
+
+      // Apply a swirl around a center point with given radius and strength
+      vec2 swirl(vec2 uv, vec2 center, float radius, float strength) {
+        vec2 offset = uv - center;
+        float dist = length(offset);
+
+        // Falloff: 1 at center, 0 at radius
+        float factor = max(0.0, 1.0 - dist / radius);
+        // Zero effect in outer 40%, then ramps up
+        float thresh = 0.4;
+        float swirlFactor = max(0.0, factor - thresh) / (1.0 - thresh);
+        float angle = pow(swirlFactor, 2.5) * strength;
+
+        float s = sin(angle);
+        float c = cos(angle);
+        vec2 rotated = vec2(
+          offset.x * c - offset.y * s,
+          offset.x * s + offset.y * c
+        );
+        return center + rotated;
+      }
+
+      void main() {
+        vec2 uv = vTexCoord;
+
+        // Multiple swirl centers with different radii and directions
+        // center coords are in UV space (0-1), radius is also in UV units
+        // Note: canvas is 2:1 aspect ratio, so x coords span 0-1, y spans 0-1
+
+        // Main center swirl (strong, clockwise)
+        // uv = swirl(uv, vec2(0.5, 0.5), 0.4, uSwirlStrength);
+
+        uv = swirl(uv, vec2(0.45, 0.45), 0.4, uSwirlStrength);
+        uv = swirl(uv, vec2(0.45, 0.55), 0.4, -uSwirlStrength);
+        uv = swirl(uv, vec2(0.55, 0.45), 0.4, uSwirlStrength);
+        uv = swirl(uv, vec2(0.55, 0.55), 0.4, -uSwirlStrength);
+
+        gl_FragColor = texture2D(uTexture, uv);
+      }
+    `;
+    
     function setup() {
       debugLog('Setup started');
       let canvas = createCanvas(2400, 1200, WEBGL);
       canvas.parent('canvas-container');
+      
+      // Create shader
+      swirlShader = createShader(swirlVert, swirlFrag);
+      
       brush.load();
       noLoop();
       debugLog('Setup complete');
@@ -312,9 +376,31 @@
       
       debugLog('Lines drawn, starting reDraw...');
       brush.reDraw();
-      debugLog('Generation complete');
+      debugLog('reDraw complete');
+
+      // ===== APPLY SWIRL SHADER =====
+      debugLog('Applying swirl shader...');
+
+      // Copy current canvas to a graphics buffer
+      let pg = createGraphics(width, height, WEBGL);
+      pg.image(get(), -width/2, -height/2);
+
+      // Apply shader
+      shader(swirlShader);
+      swirlShader.setUniform('uTexture', pg);
+      swirlShader.setUniform('uSwirlStrength', 1.2);  // Adjust strength as desired
+
+      // Draw fullscreen quad with shader
+      noStroke();
+      rect(-width/2, -height/2, width, height);
+
+      // Reset shader for future draws
+      resetShader();
+      pg.remove();
+
+      debugLog('Swirl shader applied');
     }
-    
+
     function download() {
       saveCanvas('mondrian-' + initialSeed, 'png');
     }
