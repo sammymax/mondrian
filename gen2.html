@@ -135,25 +135,27 @@
       subdivide(height, 0, height, height);
       debugLog(`Quadtree subdivision complete: ${blocks.length} blocks, ${potentialLines.length} potential lines`);
       
-      // ===== SELECT LINES FROM QUADTREE =====
-      const lines = [];
+      // ===== HELPER: CALCULATE EDGENESS =====
+      // Returns 0 at center, 1 at edges (using ray projection)
       const canvasCenterX = width / 2;
       const canvasCenterY = height / 2;
-      const maxLineDistX = canvasCenterX;
-      const maxLineDistY = canvasCenterY;
+      
+      function calcEdgeness(x, y) {
+        const dx = x - canvasCenterX;
+        const dy = y - canvasCenterY;
+        return Math.max(Math.abs(dx) / canvasCenterX, Math.abs(dy) / canvasCenterY);
+      }
+      
+      // ===== SELECT LINES FROM QUADTREE =====
+      const lines = [];
       
       for (const pl of potentialLines) {
         // Calculate center of this line
         const lineCenterX = (pl.x1 + pl.x2) / 2;
         const lineCenterY = (pl.y1 + pl.y2) / 2;
         
-        // Calculate elliptical distance from canvas center (normalized 0-1)
-        const normX = (lineCenterX - canvasCenterX) / maxLineDistX;
-        const normY = (lineCenterY - canvasCenterY) / maxLineDistY;
-        const dist = Math.sqrt(normX * normX + normY * normY);
-        
         // Edgeness: 0 at center, 1 at edges
-        const edgeness = Math.min(1, dist);
+        const edgeness = calcEdgeness(lineCenterX, lineCenterY);
         
         // Probability: higher at edges (5% at center, 95% at edges, quadratic)
         const prob = 0.05 + edgeness * edgeness * 0.9;
@@ -226,19 +228,8 @@
         const rectCenterX = b.x + b.w / 2;
         const rectCenterY = b.y + b.h / 2;
         
-        // Calculate distance from canvas center (normalized 0-1, elliptical)
-        const canvasCenterX = width / 2;
-        const canvasCenterY = height / 2;
-        const maxDistX = canvasCenterX;
-        const maxDistY = canvasCenterY;
-        
-        // Elliptical distance: normalize x and y separately
-        const normX = (rectCenterX - canvasCenterX) / maxDistX;
-        const normY = (rectCenterY - canvasCenterY) / maxDistY;
-        const dist = Math.sqrt(normX * normX + normY * normY);
-        
-        // Painterliness: 1 at center, 0 at edges (linear)
-        const painterliness = Math.max(0, 1 - dist);
+        // Painterliness: 1 at center, 0 at edges
+        const painterliness = Math.max(0, 1 - calcEdgeness(rectCenterX, rectCenterY));
         
         // Sample color based on painterliness (sqrt to shift distribution)
         const colorKey = sampleColor(Math.sqrt(painterliness));
@@ -261,7 +252,7 @@
         } else {
           // Single watercolor layer with params scaled by painterliness
           brush.fill(baseColor, 150);
-          brush.bleed(Math.pow(painterliness, 2) * 0.5, "out");
+          brush.bleed(Math.pow(painterliness, 1) * 0.5, "out");
           brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
           brush.rect(
             b.x + random(-1, 1) * painterliness,
