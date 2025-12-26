@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      background: #1a1a1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 20px;
+      font-family: system-ui, sans-serif;
+    }
+    h1 { color: white; font-weight: 300; letter-spacing: 0.1em; font-size: 1.2rem; }
+    #canvas-container { border: 1px solid #333; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+    .controls { display: flex; gap: 12px; }
+    button {
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: 500;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .primary { background: white; color: #1a1a1a; }
+    .primary:hover { background: #ddd; }
+    .secondary { background: #444; color: white; }
+    .secondary:hover { background: #555; }
+    #seed { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Procedural Mondrian</h1>
+  <div id="canvas-container"></div>
+  <div class="controls">
+    <button class="primary" onclick="regenerate()">Generate New</button>
+    <button class="secondary" onclick="download()">Download PNG</button>
+  </div>
+  <div id="seed"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.brush@1.1.4/dist/p5.brush.min.js"></script>
+  <script>
+    let currentSeed = Date.now();
+    
+    function setup() {
+      let canvas = createCanvas(600, 600, WEBGL);
+      canvas.parent('canvas-container');
+      brush.load();
+      noLoop();
+      generate();
+    }
+    
+    function regenerate() {
+      currentSeed = Date.now();
+      generate();
+    }
+    
+    function generate() {
+      document.getElementById('seed').textContent = 'Seed: ' + currentSeed;
+      brush.seed(currentSeed);
+      randomSeed(currentSeed);
+      
+      // Offset for WEBGL coordinates (center origin)
+      translate(-width/2, -height/2);
+      
+      // Background
+      background('#f8f5ef');
+      
+      // Add subtle paper texture
+      for (let i = 0; i < 30000; i++) {
+        stroke(0, random(8));
+        point(random(width), random(height));
+      }
+      
+      const colors = {
+        red: ['#e31c25', '#ff1744', '#d50000'],
+        yellow: ['#ffeb00', '#ffd600', '#ffea00'],
+        blue: ['#0055ff', '#2979ff', '#0044cc'],
+        black: ['#1a1a1a', '#212121'],
+        lightBlue: ['#40c4ff', '#00b0ff', '#80d8ff'],
+      };
+      
+      const pick = arr => arr[Math.floor(random() * arr.length)];
+      
+      // Generate sparse ad-hoc lines
+      const lines = [];
+      
+      // Long structural lines
+      const numLongLines = 2 + Math.floor(random() * 2);
+      for (let i = 0; i < numLongLines; i++) {
+        const isVert = random() > 0.5;
+        const thickness = 0.8 + random() * 1.2;
+        if (isVert) {
+          const x = 60 + random() * (width - 120);
+          const y1 = random() > 0.3 ? -20 : 50 + random() * 150;
+          const y2 = random() > 0.3 ? height + 20 : height - 50 - random() * 150;
+          lines.push({ x1: x, y1, x2: x, y2, t: thickness });
+        } else {
+          const y = 60 + random() * (height - 120);
+          const x1 = random() > 0.3 ? -20 : 50 + random() * 150;
+          const x2 = random() > 0.3 ? width + 20 : width - 50 - random() * 150;
+          lines.push({ x1, y1: y, x2, y2: y, t: thickness });
+        }
+      }
+      
+      // Medium lines
+      const numMedLines = 3 + Math.floor(random() * 3);
+      for (let i = 0; i < numMedLines; i++) {
+        const isVert = random() > 0.5;
+        const thickness = 0.6 + random() * 0.8;
+        const length = 80 + random() * 200;
+        if (isVert) {
+          const x = 30 + random() * (width - 60);
+          const y = random() * (height - length);
+          lines.push({ x1: x, y1: y, x2: x, y2: y + length, t: thickness });
+        } else {
+          const y = 30 + random() * (height - 60);
+          const x = random() * (width - length);
+          lines.push({ x1: x, y1: y, x2: x + length, y2: y, t: thickness });
+        }
+      }
+      
+      // Short lines
+      const numShortLines = 4 + Math.floor(random() * 5);
+      for (let i = 0; i < numShortLines; i++) {
+        const isVert = random() > 0.5;
+        const thickness = 0.4 + random() * 0.6;
+        const length = 30 + random() * 80;
+        if (isVert) {
+          const x = 20 + random() * (width - 40);
+          const y = random() * (height - length);
+          lines.push({ x1: x, y1: y, x2: x, y2: y + length, t: thickness });
+        } else {
+          const y = 20 + random() * (height - 40);
+          const x = random() * (width - length);
+          lines.push({ x1: x, y1: y, x2: x + length, y2: y, t: thickness });
+        }
+      }
+      
+      // Color blocks
+      const colorKeys = ['red', 'yellow', 'blue', 'red', 'yellow', 'blue', 'black', 'lightBlue'];
+      const numBlocks = 10 + Math.floor(random() * 8);
+      const blocks = [];
+      
+      for (let i = 0; i < numBlocks; i++) {
+        const w = 50 + random() * 130;
+        const h = 50 + random() * 130;
+        const x = 15 + random() * (width - w - 30);
+        const y = 15 + random() * (height - h - 30);
+        const col = colorKeys[Math.floor(random() * colorKeys.length)];
+        
+        let overlap = false;
+        for (const b of blocks) {
+          const ox = Math.max(0, Math.min(x + w, b.x + b.w) - Math.max(x, b.x));
+          const oy = Math.max(0, Math.min(y + h, b.y + b.h) - Math.max(y, b.y));
+          if (ox * oy > w * h * 0.6) { overlap = true; break; }
+        }
+        if (!overlap) blocks.push({ x, y, w, h, col });
+      }
+      
+      // Draw color blocks with watercolor fill
+      brush.noStroke();
+      brush.noHatch();
+      
+      for (const b of blocks) {
+        const baseColor = pick(colors[b.col]);
+        
+        // Watercolor fill settings
+        brush.fill(baseColor, random(80, 130));
+        brush.bleed(random(0.08, 0.2), "out");
+        brush.fillTexture(random(0.4, 0.7), random(0.3, 0.6));
+        
+        // Draw with slight offset for hand-painted feel
+        brush.rect(
+          b.x + random(-3, 3), 
+          b.y + random(-3, 3), 
+          b.w + random(-4, 4), 
+          b.h + random(-4, 4)
+        );
+      }
+      
+      // Force blend layers
+      brush.reBlend();
+      
+      // Draw black lines on top with charcoal/pen brushes
+      const lineBrushes = ['charcoal', '2B', 'HB', 'pen'];
+      
+      for (const l of lines) {
+        const brushType = pick(lineBrushes);
+        brush.set(brushType, '#0a0a0a', l.t);
+        brush.line(l.x1, l.y1, l.x2, l.y2);
+      }
+      
+      brush.reDraw();
+    }
+    
+    function download() {
+      saveCanvas('mondrian-' + currentSeed, 'png');
+    }
+  </script>
+</body>
+</html>
