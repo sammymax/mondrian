@@ -158,9 +158,14 @@
         const prob = 0.05 + edgeness * edgeness * 0.9;
         
         if (random() < prob) {
-          // Randomly shorten the line for ad-hoc feel
-          const shortenStart = random() < 0.3 ? random() * 0.3 : 0;
-          const shortenEnd = random() < 0.3 ? random() * 0.3 : 0;
+          // Line painterliness (inverse of edgeness): 0 at edges, 1 at center
+          const linePainterliness = 1 - edgeness;
+          
+          // Randomly shorten the line - more shortening toward center
+          const shortenProb = linePainterliness * 0.5;  // 0% at edges, 50% at center
+          const shortenAmt = linePainterliness * 0.4;   // 0% at edges, up to 40% at center
+          const shortenStart = random() < shortenProb ? random() * shortenAmt : 0;
+          const shortenEnd = random() < shortenProb ? random() * shortenAmt : 0;
           
           const dx = pl.x2 - pl.x1;
           const dy = pl.y2 - pl.y1;
@@ -170,7 +175,7 @@
             y1: pl.y1 + dy * shortenStart,
             x2: pl.x2 - dx * shortenEnd,
             y2: pl.y2 - dy * shortenEnd,
-            t: 0.4 + random() * 0.8  // thickness
+            t: 0.6 + random() * 0.4 + linePainterliness * random() * 0.4  // more thickness variation toward center
           });
         }
       }
