@@ -28,7 +28,7 @@
       // Subdivision behavior
       splitChance: 0.85,        // Probability of splitting a cell (0-1)
       minCellSize: 60,          // Minimum cell dimension before stopping
-      splitRatio: [0.3, 0.7],   // Range for where to place the split (0-1)
+      splitRatio: [0.1, 0.9],   // Range for where to place the split (0-1)
       
       // Line styling
       lineWidth: 6,             // Thickness of black dividing lines
@@ -124,13 +124,12 @@
       const canvas = document.getElementById('canvas');
       const ctx = canvas.getContext('2d');
       
-      // Size canvas to window
-      const size = Math.min(window.innerWidth, window.innerHeight) - CONFIG.padding * 2;
-      canvas.width = size;
-      canvas.height = size;
+      // Size canvas to full window
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
       
       // Generate rectangles
-      const rects = subdivide(0, 0, size, size);
+      const rects = subdivide(0, 0, canvas.width, canvas.height);
       
       // Draw filled rectangles
       for (const r of rects) {
@@ -147,7 +146,7 @@
       }
       
       // Draw outer border
-      ctx.strokeRect(0, 0, size, size);
+      ctx.strokeRect(0, 0, canvas.width, canvas.height);
     }
 
     // ===========================================
