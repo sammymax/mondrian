@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      background: #1a1a1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 20px;
+      font-family: system-ui, sans-serif;
+    }
+    h1 { color: white; font-weight: 300; }
+    #canvas-container { border: 1px solid #333; }
+    button {
+      padding: 10px 24px;
+      background: #444;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover { background: #555; }
+    #status { color: #888; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>8000x8000 p5.brush Test</h1>
+  <div id="canvas-container"></div>
+  <button onclick="download()">Download PNG</button>
+  <div id="status">Loading...</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.brush@1.1.4/dist/p5.brush.min.js"></script>
+  <script>
+    const scale = 2.88;
+    // const scale = 2.89;
+    function debugLog(msg) {
+      console.log(`[${new Date().toISOString()}] ${msg}`);
+      document.getElementById('status').textContent = msg;
+    }
+
+    function setup() {
+      debugLog('Creating 8000x8000 WEBGL canvas...');
+      let canvas = createCanvas(1000 * scale, 1000 * scale, WEBGL);
+      canvas.parent('canvas-container');
+
+      // Scale down for display
+      canvas.style('width', '600px');
+      canvas.style('height', '600px');
+
+      brush.load();
+      noLoop();
+      debugLog('Setup complete, drawing...');
+      generate();
+    }
+
+    function generate() {
+      debugLog('Drawing background...');
+
+      // Reset transformations and offset for WEBGL coordinates
+      resetMatrix();
+      translate(-width/2, -height/2);
+
+      background('#f8f5ef');
+
+      // Simple watercolor rectangles
+      debugLog('Drawing watercolor rectangles...');
+      brush.noStroke();
+      brush.bleed(0.3, "out");
+      brush.fillTexture(0.5, 0.2);
+
+      brush.fill('#e31c25', 150);
+      brush.rect(50 * scale, 50 * scale, 100 * scale, 100 * scale);
+      brush.fill('#0055ff', 150);
+      brush.rect(50 * scale, 500 * scale, 100 * scale, 100 * scale);
+      brush.fill('#00c853', 150);
+      brush.rect(500 * scale, 50 * scale, 100 * scale, 100 * scale);
+
+      debugLog('Blending...');
+      brush.reBlend();
+
+      debugLog('Done!');
+    }
+
+    function download() {
+      saveCanvas('test', 'png');
+    }
+  </script>
+</body>
+</html>
