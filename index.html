@@ -43,6 +43,7 @@
         { color: '#1356A2', weight: 2 },   // Blue
         { color: '#F7D842', weight: 2 },   // Yellow
       ],
+      coloringAttempts: 100,    // Number of random colorings to try
       
       // Canvas padding from edge
       padding: 20,
@@ -57,6 +58,11 @@
       return Math.random() * (max - min) + min;
     }
     
+    // Inverse lerp: returns 0-1 based on where value falls in range
+    function inverseLerp(value, min, max) {
+      return Math.max(0, Math.min(1, (value - min) / (max - min)));
+    }
+    
     // Shuffle an array in place (Fisher-Yates)
     function shuffle(arr) {
       for (let i = arr.length - 1; i > 0; i--) {
@@ -66,29 +72,58 @@
       return arr;
     }
     
-    // Generate color assignments for n cells based on weights
-    function generateColors(n) {
+    // Generate a random color assignment for n cells
+    function randomColoring(n) {
       const totalWeight = CONFIG.colors.reduce((sum, c) => sum + c.weight, 0);
-      const colors = [];
+      const result = [];
       
-      // Assign counts based on weights
       for (const c of CONFIG.colors) {
         const count = Math.round(n * c.weight / totalWeight);
         for (let i = 0; i < count; i++) {
-          colors.push(c.color);
+          result.push(c.color);
         }
       }
       
-      // Adjust if rounding gave us wrong total (fill or trim with first color)
-      while (colors.length < n) colors.push(CONFIG.colors[0].color);
-      while (colors.length > n) colors.pop();
+      while (result.length < n) result.push(CONFIG.colors[0].color);
+      while (result.length > n) result.pop();
       
-      return shuffle(colors);
+      return shuffle(result);
     }
-
-    // Inverse lerp: returns 0-1 based on where value falls in range
-    function inverseLerp(value, min, max) {
-      return Math.max(0, Math.min(1, (value - min) / (max - min)));
+    
+    // Score a coloring by how close area proportions match target weights
+    function scoreColoring(coloring, rects) {
+      const totalWeight = CONFIG.colors.reduce((sum, c) => sum + c.weight, 0);
+      const totalArea = rects.reduce((sum, r) => sum + r.w * r.h, 0);
+      
+      let error = 0;
+      for (const c of CONFIG.colors) {
+        const targetProportion = c.weight / totalWeight;
+        let actualArea = 0;
+        for (let i = 0; i < rects.length; i++) {
+          if (coloring[i] === c.color) {
+            actualArea += rects[i].w * rects[i].h;
+          }
+        }
+        const actualProportion = actualArea / totalArea;
+        error += Math.pow(targetProportion - actualProportion, 2);
+      }
+      return error;
+    }
+    
+    // Generate best coloring from N attempts
+    function generateColors(rects) {
+      let bestColoring = null;
+      let bestScore = Infinity;
+      
+      for (let i = 0; i < CONFIG.coloringAttempts; i++) {
+        const coloring = randomColoring(rects.length);
+        const score = scoreColoring(coloring, rects);
+        if (score < bestScore) {
+          bestScore = score;
+          bestColoring = coloring;
+        }
+      }
+      return bestColoring;
     }
 
     // ===========================================
@@ -98,6 +133,7 @@
     // Recursively subdivide a rectangle
     // Returns an array of final rectangles { x, y, w, h }
     function subdivide(x, y, w, h, depth = 0) {
+      
       // Calculate split probability based on cell size
       const size = Math.sqrt(w * h);
       const splitProbability = inverseLerp(size, CONFIG.minSplitSize, CONFIG.maxSplitSize);
@@ -108,7 +144,7 @@
       }
       
       // Decide split direction (prefer splitting the longer dimension)
-      const splitHorizontal = w > h ? true : h > w ? false : Math.random() < 0.5;
+      const splitHorizontal = w > h ? true : (h > w ? false : Math.random() < 0.5);
       
       // Determine how many pieces (2-4, capped by available space)
       const dimension = splitHorizontal ? w : h;
@@ -132,15 +168,15 @@
       for (let i = 0; i < numPieces; i++) {
         weights.push(Math.random());
       }
-      const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+      const totalWeight = weights.reduce((sum, wt) => sum + wt, 0);
       
       // Calculate piece sizes and convert to split points
       const splitPoints = [];
       let cumulative = 0;
       
       for (let i = 0; i < numPieces - 1; i++) {
-        const size = CONFIG.minSplitPixels + (weights[i] / totalWeight) * extra;
-        cumulative += size;
+        const pieceSize = CONFIG.minSplitPixels + (weights[i] / totalWeight) * extra;
+        cumulative += pieceSize;
         splitPoints.push(cumulative / dimension);
       }
       
@@ -183,13 +219,13 @@
       
       // Generate rectangles and colors
       const rects = subdivide(0, 0, canvas.width, canvas.height);
-      const colors = generateColors(rects.length);
+      const colors = generateColors(rects);
       
       // Draw filled rectangles
-      for (let i = 0; i < rects.length; i++) {
+      rects.forEach((r, i) => {
         ctx.fillStyle = colors[i];
-        ctx.fillRect(rects[i].x, rects[i].y, rects[i].w, rects[i].h);
-      }
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+      });
       
       // Draw black outlines on top
       ctx.strokeStyle = CONFIG.lineColor;
