@@ -84,63 +84,9 @@
       
       const pick = arr => arr[Math.floor(random() * arr.length)];
       
-      // Generate sparse ad-hoc lines
-      const lines = [];
-      
-      // Long structural lines
-      const numLongLines = 2 + Math.floor(random() * 2);
-      for (let i = 0; i < numLongLines; i++) {
-        const isVert = random() > 0.5;
-        const thickness = 0.8 + random() * 1.2;
-        if (isVert) {
-          const x = 60 + random() * (width - 120);
-          const y1 = random() > 0.3 ? -20 : 50 + random() * 150;
-          const y2 = random() > 0.3 ? height + 20 : height - 50 - random() * 150;
-          lines.push({ x1: x, y1, x2: x, y2, t: thickness });
-        } else {
-          const y = 60 + random() * (height - 120);
-          const x1 = random() > 0.3 ? -20 : 50 + random() * 150;
-          const x2 = random() > 0.3 ? width + 20 : width - 50 - random() * 150;
-          lines.push({ x1, y1: y, x2, y2: y, t: thickness });
-        }
-      }
-      
-      // Medium lines
-      const numMedLines = 3 + Math.floor(random() * 3);
-      for (let i = 0; i < numMedLines; i++) {
-        const isVert = random() > 0.5;
-        const thickness = 0.6 + random() * 0.8;
-        const length = 80 + random() * 200;
-        if (isVert) {
-          const x = 30 + random() * (width - 60);
-          const y = random() * (height - length);
-          lines.push({ x1: x, y1: y, x2: x, y2: y + length, t: thickness });
-        } else {
-          const y = 30 + random() * (height - 60);
-          const x = random() * (width - length);
-          lines.push({ x1: x, y1: y, x2: x + length, y2: y, t: thickness });
-        }
-      }
-      
-      // Short lines
-      const numShortLines = 4 + Math.floor(random() * 5);
-      for (let i = 0; i < numShortLines; i++) {
-        const isVert = random() > 0.5;
-        const thickness = 0.4 + random() * 0.6;
-        const length = 30 + random() * 80;
-        if (isVert) {
-          const x = 20 + random() * (width - 40);
-          const y = random() * (height - length);
-          lines.push({ x1: x, y1: y, x2: x, y2: y + length, t: thickness });
-        } else {
-          const y = 20 + random() * (height - 40);
-          const x = random() * (width - length);
-          lines.push({ x1: x, y1: y, x2: x + length, y2: y, t: thickness });
-        }
-      }
-      
-      // Color blocks via quadtree subdivision
+      // ===== QUADTREE SUBDIVISION =====
       const blocks = [];
+      const potentialLines = [];
       
       function subdivide(x, y, w, h) {
         const minSide = Math.min(w, h);
@@ -159,6 +105,11 @@
           // Divide into 4 quadrants
           const midX = x + w / 2;
           const midY = y + h / 2;
+          
+          // Store the division lines
+          potentialLines.push({ x1: midX, y1: y, x2: midX, y2: y + h });
+          potentialLines.push({ x1: x, y1: midY, x2: x + w, y2: midY });
+          
           subdivide(x, y, w / 2, h / 2);
           subdivide(midX, y, w / 2, h / 2);
           subdivide(x, midY, w / 2, h / 2);
@@ -172,6 +123,29 @@
       // Start with full canvas
       subdivide(0, 0, width, height);
       
+      // ===== SELECT LINES FROM QUADTREE =====
+      const lines = [];
+      for (const pl of potentialLines) {
+        // ~40% chance to draw each line
+        if (random() < 0.4) {
+          // Randomly shorten the line for ad-hoc feel
+          const shortenStart = random() < 0.3 ? random() * 0.3 : 0;
+          const shortenEnd = random() < 0.3 ? random() * 0.3 : 0;
+          
+          const dx = pl.x2 - pl.x1;
+          const dy = pl.y2 - pl.y1;
+          
+          lines.push({
+            x1: pl.x1 + dx * shortenStart,
+            y1: pl.y1 + dy * shortenStart,
+            x2: pl.x2 - dx * shortenEnd,
+            y2: pl.y2 - dy * shortenEnd,
+            t: 0.4 + random() * 0.8  // thickness
+          });
+        }
+      }
+      
+      // ===== ASSIGN COLORS =====
       // Create color pool with proportions (white most common)
       const colorProportions = {
         white: 10,
@@ -201,7 +175,8 @@
         blocks[i].col = colorPool[i % colorPool.length];
       }
       
-      // Draw color blocks - watercolor params scaled by distance from center
+      // ===== DRAW BLOCKS =====
+      // Watercolor params scaled by distance from center
       brush.noStroke();
       brush.noHatch();
       
@@ -239,6 +214,7 @@
       // Force blend layers
       brush.reBlend();
       
+      // ===== DRAW LINES =====
       // Add custom oil paint brush with bristle texture and pressure variation
       brush.add("oilpaint", {
         type: "custom",
