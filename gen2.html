@@ -136,9 +136,28 @@
       
       // ===== SELECT LINES FROM QUADTREE =====
       const lines = [];
+      const canvasCenterX = width / 2;
+      const canvasCenterY = height / 2;
+      const maxLineDist = Math.min(canvasCenterX, canvasCenterY);
+      
       for (const pl of potentialLines) {
-        // ~40% chance to draw each line
-        if (random() < 0.4) {
+        // Calculate center of this line
+        const lineCenterX = (pl.x1 + pl.x2) / 2;
+        const lineCenterY = (pl.y1 + pl.y2) / 2;
+        
+        // Calculate distance from canvas center (normalized 0-1)
+        const dist = Math.sqrt(
+          Math.pow(lineCenterX - canvasCenterX, 2) + 
+          Math.pow(lineCenterY - canvasCenterY, 2)
+        );
+        
+        // Edgeness: 0 at center, 1 at edges
+        const edgeness = Math.min(1, dist / maxLineDist);
+        
+        // Probability: higher at edges (5% at center, 95% at edges, quadratic)
+        const prob = 0.05 + edgeness * edgeness * 0.9;
+        
+        if (random() < prob) {
           // Randomly shorten the line for ad-hoc feel
           const shortenStart = random() < 0.3 ? random() * 0.3 : 0;
           const shortenEnd = random() < 0.3 ? random() * 0.3 : 0;
