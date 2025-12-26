@@ -46,6 +46,9 @@
     }
 
     function setup() {
+      let gl = document.createElement('canvas').getContext('webgl');
+      console.log('MAX_TEXTURE_SIZE:', gl.getParameter(gl.MAX_TEXTURE_SIZE));
+
       debugLog('Creating 8000x8000 WEBGL canvas...');
       let canvas = createCanvas(1000 * scale, 1000 * scale, WEBGL);
       canvas.parent('canvas-container');
