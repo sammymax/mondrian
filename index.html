@@ -26,12 +26,11 @@
     
     const CONFIG = {
       // Subdivision behavior
-      splitChance: 0.85,        // Probability of splitting a cell (0-1)
-      minCellSize: 120,          // Stop recursing below this size
-      forceSplitSize: 500,      // Always split cells with both dimensions larger than this
-      splitRatio: [0.1, 0.9],   // Range for where to place the split (0-1)
-      minSplits: 2,             // Minimum number of splits
-      maxSplits: 4,             // Maximum number of splits
+      minSplitArea: 120 * 120,   // Below this area: never split (0%)
+      maxSplitArea: 500 * 500,   // Above this area: always split (100%)
+      splitRatio: [0.1, 0.9],    // Range for where to place splits (0-1)
+      minSplits: 2,              // Minimum number of pieces per split
+      maxSplits: 4,              // Maximum number of pieces per split
       
       // Line styling
       lineWidth: 6,             // Thickness of black dividing lines
@@ -70,6 +69,11 @@
       return CONFIG.colors[0].color;
     }
 
+    // Inverse lerp: returns 0-1 based on where value falls in range
+    function inverseLerp(value, min, max) {
+      return Math.max(0, Math.min(1, (value - min) / (max - min)));
+    }
+
     // ===========================================
     // SUBDIVISION ALGORITHM
     // ===========================================
@@ -77,12 +81,12 @@
     // Recursively subdivide a rectangle
     // Returns an array of final rectangles { x, y, w, h }
     function subdivide(x, y, w, h, depth = 0) {
-      // Base case: cell too small or chose not to split
-      const tooSmall = w < CONFIG.minCellSize || h < CONFIG.minCellSize;
-      const mustSplit = w > CONFIG.forceSplitSize && h > CONFIG.forceSplitSize;
-      const shouldSplit = mustSplit || Math.random() < CONFIG.splitChance;
+      // Calculate split probability based on area
+      const area = w * h;
+      const splitProbability = inverseLerp(area, CONFIG.minSplitArea, CONFIG.maxSplitArea);
+      const shouldSplit = Math.random() < splitProbability;
       
-      if (tooSmall || !shouldSplit) {
+      if (!shouldSplit) {
         return [{ x, y, w, h }];
       }
       
