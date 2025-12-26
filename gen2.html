@@ -75,6 +75,57 @@
       varying vec2 vTexCoord;
       uniform sampler2D uTexture;
       uniform float uSwirlStrength;
+      uniform float uNoiseStrength;
+      uniform float uNoiseScale;
+
+      // Permutation polynomial hash (attempt to mimic Perlin's permutation)
+      vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
+      vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+      vec2 fade(vec2 t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+
+      // Classic Perlin 2D noise
+      float cnoise(vec2 P) {
+        vec4 Pi = floor(P.xyxy) + vec4(0.0, 0.0, 1.0, 1.0);
+        vec4 Pf = fract(P.xyxy) - vec4(0.0, 0.0, 1.0, 1.0);
+        Pi = mod289(Pi);
+        vec4 ix = Pi.xzxz;
+        vec4 iy = Pi.yyww;
+        vec4 fx = Pf.xzxz;
+        vec4 fy = Pf.yyww;
+        vec4 i = permute(permute(ix) + iy);
+        vec4 gx = fract(i * (1.0 / 41.0)) * 2.0 - 1.0;
+        vec4 gy = abs(gx) - 0.5;
+        vec4 tx = floor(gx + 0.5);
+        gx = gx - tx;
+        vec2 g00 = vec2(gx.x, gy.x);
+        vec2 g10 = vec2(gx.y, gy.y);
+        vec2 g01 = vec2(gx.z, gy.z);
+        vec2 g11 = vec2(gx.w, gy.w);
+        vec4 norm = taylorInvSqrt(vec4(dot(g00, g00), dot(g01, g01), dot(g10, g10), dot(g11, g11)));
+        g00 *= norm.x; g01 *= norm.y; g10 *= norm.z; g11 *= norm.w;
+        float n00 = dot(g00, vec2(fx.x, fy.x));
+        float n10 = dot(g10, vec2(fx.y, fy.y));
+        float n01 = dot(g01, vec2(fx.z, fy.z));
+        float n11 = dot(g11, vec2(fx.w, fy.w));
+        vec2 fade_xy = fade(Pf.xy);
+        vec2 n_x = mix(vec2(n00, n01), vec2(n10, n11), fade_xy.x);
+        float n_xy = mix(n_x.x, n_x.y, fade_xy.y);
+        return 2.3 * n_xy;
+      }
+
+      // Fractal Brownian Motion for more organic noise
+      float fbm(vec2 p) {
+        float value = 0.0;
+        float amplitude = 0.5;
+        for (int i = 0; i < 4; i++) {
+          value += amplitude * cnoise(p);
+          p *= 2.0;
+          amplitude *= 0.5;
+        }
+        return value;
+      }
 
       // Apply a swirl around a center point with given radius and strength
       vec2 swirl(vec2 uv, vec2 center, float radius, float strength) {
@@ -97,20 +148,34 @@
         return center + rotated;
       }
 
+      // Calculate painterliness: 1 at center, 0 at edges
+      float calcPainterliness(vec2 uv) {
+        vec2 centered = uv - vec2(0.5);
+        float edgeness = max(abs(centered.x) * 2.0, abs(centered.y) * 2.0);
+        return max(0.0, 1.0 - edgeness);
+      }
+
       void main() {
         vec2 uv = vTexCoord;
 
         // Multiple swirl centers with different radii and directions
-        // center coords are in UV space (0-1), radius is also in UV units
-        // Note: canvas is 2:1 aspect ratio, so x coords span 0-1, y spans 0-1
-
-        // Main center swirl (strong, clockwise)
-        // uv = swirl(uv, vec2(0.5, 0.5), 0.4, uSwirlStrength);
-
         uv = swirl(uv, vec2(0.45, 0.45), 0.4, uSwirlStrength);
         uv = swirl(uv, vec2(0.45, 0.55), 0.4, -uSwirlStrength);
         uv = swirl(uv, vec2(0.55, 0.45), 0.4, uSwirlStrength);
         uv = swirl(uv, vec2(0.55, 0.55), 0.4, -uSwirlStrength);
+
+        // Perlin noise displacement, scaled by painterliness (same formula as swirl)
+        float painterliness = calcPainterliness(uv);
+        float thresh = 0.05;
+        float noiseFactor = max(0.0, painterliness - thresh) / (1.0 - thresh);
+        float noiseScale = pow(noiseFactor, 2.0);
+
+        vec2 noiseCoord = uv * uNoiseScale;
+        vec2 noiseDisplacement = vec2(
+          fbm(noiseCoord),
+          fbm(noiseCoord + vec2(43.0, 17.0))  // offset for second axis
+        );
+        uv += noiseDisplacement * uNoiseStrength * noiseScale;
 
         gl_FragColor = texture2D(uTexture, uv);
       }
@@ -396,6 +461,8 @@
       shader(swirlShader);
       swirlShader.setUniform('uTexture', pg);
       swirlShader.setUniform('uSwirlStrength', 1.2);  // Adjust strength as desired
+      swirlShader.setUniform('uNoiseStrength', 0.125);  // Displacement amount (in UV space)
+      swirlShader.setUniform('uNoiseScale', 8.0);  // Noise frequency
 
       // Draw fullscreen quad with shader
       noStroke();
