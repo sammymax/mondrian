@@ -1,24 +1,20 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-// Simple noise function for hand-painted effect
 const createNoise = () => {
-  const permutation = [];
-  for (let i = 0; i < 256; i++) permutation[i] = i;
+  const perm = [];
+  for (let i = 0; i < 256; i++) perm[i] = i;
   for (let i = 255; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [permutation[i], permutation[j]] = [permutation[j], permutation[i]];
+    [perm[i], perm[j]] = [perm[j], perm[i]];
   }
-  const p = [...permutation, ...permutation];
-  
+  const p = [...perm, ...perm];
   const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
   const lerp = (t, a, b) => a + t * (b - a);
   const grad = (hash, x) => (hash & 1 ? x : -x);
-  
   return (x) => {
     const X = Math.floor(x) & 255;
     x -= Math.floor(x);
-    const u = fade(x);
-    return lerp(u, grad(p[X], x), grad(p[X + 1], x - 1));
+    return lerp(fade(x), grad(p[X], x), grad(p[X + 1], x - 1));
   };
 };
 
@@ -33,7 +29,6 @@ export default function MondrianGenerator() {
     const W = canvas.width;
     const H = canvas.height;
     
-    // Seeded random
     let s = seed;
     const random = () => {
       s = (s * 1103515245 + 12345) & 0x7fffffff;
@@ -42,262 +37,224 @@ export default function MondrianGenerator() {
     
     const noise = createNoise();
     
-    // Colors palette
     const colors = {
-      red: ['#c41e3a', '#d32f2f', '#b71c1c', '#e53935'],
-      yellow: ['#f9a825', '#fbc02d', '#f57f17', '#ffeb3b'],
-      blue: ['#1565c0', '#1976d2', '#0d47a1', '#2196f3'],
-      black: ['#1a1a1a', '#212121', '#0d0d0d'],
-      white: ['#fafafa', '#f5f5f5', '#eeeeee', '#fff8e1'],
-      lightBlue: ['#bbdefb', '#90caf9', '#e3f2fd', '#b3e5fc'],
-      lightGray: ['#eceff1', '#e0e0e0', '#f5f5f5']
+      red: ['#e31c25', '#ff1744', '#d50000', '#ff0022'],
+      yellow: ['#ffeb00', '#ffd600', '#ffea00', '#ffe100'],
+      blue: ['#0055ff', '#2979ff', '#0044cc', '#304ffe'],
+      black: ['#1a1a1a', '#212121'],
+      white: ['#fafafa', '#f5f5f5', '#fff8e1'],
+      lightBlue: ['#40c4ff', '#00b0ff', '#80d8ff'],
+      lightGray: ['#eceff1', '#e0e0e0']
     };
     
-    const pickColor = (arr) => arr[Math.floor(random() * arr.length)];
+    const pick = arr => arr[Math.floor(random() * arr.length)];
     
-    // Fill background with off-white texture
-    ctx.fillStyle = '#f8f6f0';
+    // Background
+    ctx.fillStyle = '#f8f5ef';
     ctx.fillRect(0, 0, W, H);
     
-    // Add paper texture
-    for (let i = 0; i < 50000; i++) {
-      const x = random() * W;
-      const y = random() * H;
-      const alpha = random() * 0.03;
-      ctx.fillStyle = `rgba(0,0,0,${alpha})`;
-      ctx.fillRect(x, y, 1, 1);
+    // Paper texture
+    for (let i = 0; i < 40000; i++) {
+      ctx.fillStyle = `rgba(0,0,0,${random() * 0.025})`;
+      ctx.fillRect(random() * W, random() * H, 1, 1);
     }
     
-    // Generate grid divisions
-    const xDivs = [0];
-    const yDivs = [0];
-    
-    let x = 0;
-    while (x < W - 60) {
-      x += 40 + random() * 120;
-      if (x < W - 30) xDivs.push(x);
-    }
-    xDivs.push(W);
-    
-    let y = 0;
-    while (y < H - 60) {
-      y += 40 + random() * 120;
-      if (y < H - 30) yDivs.push(y);
-    }
-    yDivs.push(H);
-    
-    // Create cells
-    const cells = [];
-    for (let i = 0; i < xDivs.length - 1; i++) {
-      for (let j = 0; j < yDivs.length - 1; j++) {
-        cells.push({
-          x: xDivs[i],
-          y: yDivs[j],
-          w: xDivs[i + 1] - xDivs[i],
-          h: yDivs[j + 1] - yDivs[j],
-          color: null
-        });
-      }
-    }
-    
-    // Merge some cells randomly
-    const mergedCells = [...cells];
-    for (let i = 0; i < 5; i++) {
-      if (random() > 0.3) {
-        const idx = Math.floor(random() * mergedCells.length);
-        const cell = mergedCells[idx];
-        // Try to expand
-        if (random() > 0.5 && cell.x + cell.w < W - 20) {
-          cell.w += 30 + random() * 60;
-        }
-        if (random() > 0.5 && cell.y + cell.h < H - 20) {
-          cell.h += 30 + random() * 60;
-        }
-      }
-    }
-    
-    // Assign colors to some cells
-    const colorKeys = ['red', 'yellow', 'blue', 'black', 'lightBlue', 'lightGray'];
-    mergedCells.forEach(cell => {
-      if (random() > 0.6) {
-        cell.color = colorKeys[Math.floor(random() * colorKeys.length)];
-      }
-    });
-    
-    // Draw wobbly filled rectangle
-    const drawPaintedRect = (x, y, w, h, colorKey) => {
-      const baseColor = pickColor(colors[colorKey]);
-      const wobble = 3;
-      const offset = random() * 1000;
-      
-      // Draw with slight offset variations for painterly effect
-      for (let layer = 0; layer < 3; layer++) {
-        ctx.save();
-        ctx.beginPath();
-        
-        const points = [];
-        const steps = 20;
-        
-        // Top edge
-        for (let i = 0; i <= steps; i++) {
-          const px = x + (w * i / steps);
-          const py = y + noise(px * 0.05 + offset) * wobble;
-          points.push([px, py]);
-        }
-        // Right edge
-        for (let i = 0; i <= steps; i++) {
-          const px = x + w + noise((y + h * i / steps) * 0.05 + offset + 100) * wobble;
-          const py = y + (h * i / steps);
-          points.push([px, py]);
-        }
-        // Bottom edge
-        for (let i = steps; i >= 0; i--) {
-          const px = x + (w * i / steps);
-          const py = y + h + noise(px * 0.05 + offset + 200) * wobble;
-          points.push([px, py]);
-        }
-        // Left edge
-        for (let i = steps; i >= 0; i--) {
-          const px = x + noise((y + h * i / steps) * 0.05 + offset + 300) * wobble;
-          const py = y + (h * i / steps);
-          points.push([px, py]);
-        }
-        
-        ctx.moveTo(points[0][0], points[0][1]);
-        points.forEach(([px, py]) => ctx.lineTo(px, py));
-        ctx.closePath();
-        
-        ctx.fillStyle = baseColor;
-        ctx.globalAlpha = layer === 0 ? 0.9 : 0.3;
-        ctx.fill();
-        ctx.restore();
-      }
-      
-      // Add texture within the rectangle
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x - 5, y - 5, w + 10, h + 10);
-      ctx.clip();
-      
-      for (let i = 0; i < w * h * 0.01; i++) {
-        const tx = x + random() * w;
-        const ty = y + random() * h;
-        ctx.fillStyle = `rgba(255,255,255,${random() * 0.1})`;
-        ctx.fillRect(tx, ty, random() * 3, random() * 3);
-      }
-      ctx.restore();
-    };
-    
-    // Draw colored cells
-    mergedCells.forEach(cell => {
-      if (cell.color) {
-        drawPaintedRect(
-          cell.x + 2 + random() * 4,
-          cell.y + 2 + random() * 4,
-          cell.w - 4 - random() * 4,
-          cell.h - 4 - random() * 4,
-          cell.color
-        );
-      }
-    });
-    
-    // Draw wobbly line
-    const drawWobblyLine = (x1, y1, x2, y2, thickness) => {
-      const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-      const steps = Math.max(20, len / 5);
-      const offset = random() * 1000;
+    // Draw wobbly line segment
+    const drawLine = (x1, y1, x2, y2, thickness) => {
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const steps = Math.max(15, len / 6);
+      const off = random() * 1000;
       
       ctx.save();
       ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
       
-      // Draw multiple strokes for painterly effect
       for (let stroke = 0; stroke < 3; stroke++) {
         ctx.beginPath();
-        ctx.strokeStyle = stroke === 0 ? '#0a0a0a' : `rgba(10,10,10,${0.3 - stroke * 0.1})`;
-        ctx.lineWidth = thickness * (1 - stroke * 0.2) + random() * 0.5;
+        ctx.strokeStyle = stroke === 0 ? '#0a0a0a' : `rgba(20,15,10,${0.25 - stroke * 0.08})`;
+        ctx.lineWidth = thickness * (1 - stroke * 0.15) + random() * 0.3;
         
         for (let i = 0; i <= steps; i++) {
           const t = i / steps;
-          const px = x1 + (x2 - x1) * t;
-          const py = y1 + (y2 - y1) * t;
+          let px = x1 + (x2 - x1) * t;
+          let py = y1 + (y2 - y1) * t;
           
-          // Add wobble perpendicular to line direction
           const angle = Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2;
-          const wobbleAmt = noise(i * 0.3 + offset) * 2 * (1 + stroke * 0.5);
+          const wobble = noise(i * 0.25 + off) * 1.8;
+          px += Math.cos(angle) * wobble;
+          py += Math.sin(angle) * wobble;
           
-          const wx = px + Math.cos(angle) * wobbleAmt;
-          const wy = py + Math.sin(angle) * wobbleAmt;
-          
-          if (i === 0) ctx.moveTo(wx, wy);
-          else ctx.lineTo(wx, wy);
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
         }
         ctx.stroke();
       }
       ctx.restore();
     };
     
-    // Draw grid lines with variation
-    const drawnLines = new Set();
-    
-    // Vertical lines
-    xDivs.slice(1, -1).forEach(xPos => {
-      const thickness = 2 + random() * 4;
-      const startY = random() * 20 - 10;
-      const endY = H + random() * 20 - 10;
+    // Draw painted rectangle
+    const drawRect = (x, y, w, h, colorKey) => {
+      const col = pick(colors[colorKey]);
+      const off = random() * 1000;
+      const wobble = 2.5;
       
-      // Sometimes break the line
-      if (random() > 0.2) {
-        drawWobblyLine(xPos, startY, xPos, endY, thickness);
-      } else {
-        const breakPoint = H * (0.3 + random() * 0.4);
-        drawWobblyLine(xPos, startY, xPos, breakPoint - 20, thickness);
-        drawWobblyLine(xPos, breakPoint + 20, xPos, endY, thickness);
-      }
-    });
-    
-    // Horizontal lines
-    yDivs.slice(1, -1).forEach(yPos => {
-      const thickness = 2 + random() * 4;
-      const startX = random() * 20 - 10;
-      const endX = W + random() * 20 - 10;
-      
-      if (random() > 0.2) {
-        drawWobblyLine(startX, yPos, endX, yPos, thickness);
-      } else {
-        const breakPoint = W * (0.3 + random() * 0.4);
-        drawWobblyLine(startX, yPos, breakPoint - 20, yPos, thickness);
-        drawWobblyLine(breakPoint + 20, yPos, endX, yPos, thickness);
-      }
-    });
-    
-    // Add some extra short lines for complexity
-    for (let i = 0; i < 8; i++) {
-      if (random() > 0.5) {
-        const isHorizontal = random() > 0.5;
-        const thickness = 1.5 + random() * 3;
+      for (let layer = 0; layer < 3; layer++) {
+        ctx.save();
+        ctx.beginPath();
         
-        if (isHorizontal) {
-          const yPos = 50 + random() * (H - 100);
-          const startX = random() * W * 0.3;
-          const length = 50 + random() * 150;
-          drawWobblyLine(startX, yPos, startX + length, yPos, thickness);
-        } else {
-          const xPos = 50 + random() * (W - 100);
-          const startY = random() * H * 0.3;
-          const length = 50 + random() * 150;
-          drawWobblyLine(xPos, startY, xPos, startY + length, thickness);
-        }
+        const pts = [];
+        const st = 15;
+        
+        for (let i = 0; i <= st; i++) pts.push([x + w * i / st, y + noise(i * 0.4 + off) * wobble]);
+        for (let i = 0; i <= st; i++) pts.push([x + w + noise(i * 0.4 + off + 50) * wobble, y + h * i / st]);
+        for (let i = st; i >= 0; i--) pts.push([x + w * i / st, y + h + noise(i * 0.4 + off + 100) * wobble]);
+        for (let i = st; i >= 0; i--) pts.push([x + noise(i * 0.4 + off + 150) * wobble, y + h * i / st]);
+        
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        pts.forEach(([px, py]) => ctx.lineTo(px, py));
+        ctx.closePath();
+        
+        ctx.fillStyle = col;
+        ctx.globalAlpha = layer === 0 ? 0.92 : 0.2;
+        ctx.fill();
+        ctx.restore();
+      }
+      
+      // Texture
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      ctx.clip();
+      for (let i = 0; i < w * h * 0.008; i++) {
+        ctx.fillStyle = `rgba(255,255,255,${random() * 0.12})`;
+        ctx.fillRect(x + random() * w, y + random() * h, random() * 2 + 1, random() * 2 + 1);
+      }
+      ctx.restore();
+    };
+    
+    // Generate ad-hoc lines (NOT a regular grid)
+    const lines = [];
+    
+    // Some longer structural lines (sparse)
+    const numLongLines = 2 + Math.floor(random() * 2);
+    for (let i = 0; i < numLongLines; i++) {
+      const isVert = random() > 0.5;
+      const thickness = 2.5 + random() * 4;
+      
+      if (isVert) {
+        const x = 60 + random() * (W - 120);
+        const y1 = random() * 80 - 20;
+        const y2 = H - random() * 80 + 20;
+        // Maybe don't go full length
+        const actualY1 = random() > 0.3 ? y1 : 50 + random() * 150;
+        const actualY2 = random() > 0.3 ? y2 : H - 50 - random() * 150;
+        lines.push({ x1: x, y1: actualY1, x2: x, y2: actualY2, t: thickness, type: 'vert' });
+      } else {
+        const y = 60 + random() * (H - 120);
+        const x1 = random() * 80 - 20;
+        const x2 = W - random() * 80 + 20;
+        const actualX1 = random() > 0.3 ? x1 : 50 + random() * 150;
+        const actualX2 = random() > 0.3 ? x2 : W - 50 - random() * 150;
+        lines.push({ x1: actualX1, y1: y, x2: actualX2, y2: y, t: thickness, type: 'horiz' });
       }
     }
     
-    // Add subtle overall texture
+    // Medium length segments (sparse)
+    const numMedLines = 3 + Math.floor(random() * 3);
+    for (let i = 0; i < numMedLines; i++) {
+      const isVert = random() > 0.5;
+      const thickness = 2 + random() * 3;
+      const length = 80 + random() * 200;
+      
+      if (isVert) {
+        const x = 30 + random() * (W - 60);
+        const y = random() * (H - length);
+        lines.push({ x1: x, y1: y, x2: x, y2: y + length, t: thickness, type: 'vert' });
+      } else {
+        const y = 30 + random() * (H - 60);
+        const x = random() * (W - length);
+        lines.push({ x1: x, y1: y, x2: x + length, y2: y, t: thickness, type: 'horiz' });
+      }
+    }
+    
+    // Short accent lines (sparse)
+    const numShortLines = 4 + Math.floor(random() * 5);
+    for (let i = 0; i < numShortLines; i++) {
+      const isVert = random() > 0.5;
+      const thickness = 1.5 + random() * 2.5;
+      const length = 30 + random() * 80;
+      
+      if (isVert) {
+        const x = 20 + random() * (W - 40);
+        const y = random() * (H - length);
+        lines.push({ x1: x, y1: y, x2: x, y2: y + length, t: thickness, type: 'vert' });
+      } else {
+        const y = 20 + random() * (H - 40);
+        const x = random() * (W - length);
+        lines.push({ x1: x, y1: y, x2: x + length, y2: y, t: thickness, type: 'horiz' });
+      }
+    }
+    
+    // Tiny dashes (sparse)
+    const numDashes = 2 + Math.floor(random() * 4);
+    for (let i = 0; i < numDashes; i++) {
+      const isVert = random() > 0.5;
+      const thickness = 1 + random() * 2;
+      const length = 15 + random() * 40;
+      
+      if (isVert) {
+        const x = random() * W;
+        const y = random() * (H - length);
+        lines.push({ x1: x, y1: y, x2: x, y2: y + length, t: thickness, type: 'vert' });
+      } else {
+        const y = random() * H;
+        const x = random() * (W - length);
+        lines.push({ x1: x, y1: y, x2: x + length, y2: y, t: thickness, type: 'horiz' });
+      }
+    }
+    
+    // Place color blocks more frequently with vibrant colors
+    const colorKeys = ['red', 'yellow', 'blue', 'red', 'yellow', 'blue', 'black', 'lightBlue'];
+    const numBlocks = 10 + Math.floor(random() * 8);
+    const blocks = [];
+    
+    for (let i = 0; i < numBlocks; i++) {
+      const w = 40 + random() * 140;
+      const h = 40 + random() * 140;
+      const x = 20 + random() * (W - w - 40);
+      const y = 20 + random() * (H - h - 40);
+      const col = colorKeys[Math.floor(random() * colorKeys.length)];
+      
+      // Skip if too much overlap with existing blocks
+      let overlap = false;
+      for (const b of blocks) {
+        const ox = Math.max(0, Math.min(x + w, b.x + b.w) - Math.max(x, b.x));
+        const oy = Math.max(0, Math.min(y + h, b.y + b.h) - Math.max(y, b.y));
+        if (ox * oy > w * h * 0.7) {
+          overlap = true;
+          break;
+        }
+      }
+      
+      if (!overlap) {
+        blocks.push({ x, y, w, h, col });
+      }
+    }
+    
+    // Draw blocks first
+    blocks.forEach(b => {
+      if (b.col !== 'white') {
+        drawRect(b.x, b.y, b.w, b.h, b.col);
+      }
+    });
+    
+    // Draw all lines on top
+    lines.forEach(l => drawLine(l.x1, l.y1, l.x2, l.y2, l.t));
+    
+    // Final texture overlay
     ctx.globalCompositeOperation = 'multiply';
-    for (let i = 0; i < 20000; i++) {
-      const tx = random() * W;
-      const ty = random() * H;
-      ctx.fillStyle = `rgba(200,190,170,${random() * 0.02})`;
-      ctx.fillRect(tx, ty, 2, 2);
+    for (let i = 0; i < 15000; i++) {
+      ctx.fillStyle = `rgba(180,170,150,${random() * 0.015})`;
+      ctx.fillRect(random() * W, random() * H, 2, 2);
     }
     ctx.globalCompositeOperation = 'source-over';
     
@@ -306,16 +263,6 @@ export default function MondrianGenerator() {
   useEffect(() => {
     generate();
   }, [generate]);
-  
-  const regenerate = () => setSeed(Date.now());
-  
-  const download = () => {
-    const canvas = canvasRef.current;
-    const link = document.createElement('a');
-    link.download = `mondrian-${seed}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  };
   
   return (
     <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center p-4 gap-4">
@@ -331,13 +278,18 @@ export default function MondrianGenerator() {
       
       <div className="flex gap-3">
         <button
-          onClick={regenerate}
+          onClick={() => setSeed(Date.now())}
           className="px-6 py-2 bg-white text-neutral-900 font-medium rounded hover:bg-neutral-200 transition-colors"
         >
           Generate New
         </button>
         <button
-          onClick={download}
+          onClick={() => {
+            const link = document.createElement('a');
+            link.download = `mondrian-${seed}.png`;
+            link.href = canvasRef.current.toDataURL('image/png');
+            link.click();
+          }}
           className="px-6 py-2 bg-neutral-700 text-white font-medium rounded hover:bg-neutral-600 transition-colors"
         >
           Download PNG
