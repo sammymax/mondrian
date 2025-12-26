@@ -73,12 +73,6 @@
       // Background
       background('#f8f5ef');
       
-      // Add subtle paper texture
-      for (let i = 0; i < 30000; i++) {
-        // stroke(0, random(8));
-        // point(random(width), random(height));
-      }
-      
       const colors = {
         red: ['#e31c25', '#ff1744', '#d50000'],
         yellow: ['#ffeb00', '#ffd600', '#ffea00'],
@@ -165,7 +159,7 @@
         if (!overlap) blocks.push({ x, y, w, h, col });
       }
       
-      // Draw color blocks with painterliness based on distance from center
+      // Draw color blocks - watercolor params scaled by distance from center
       brush.noStroke();
       brush.noHatch();
       
@@ -188,28 +182,16 @@
         // Painterliness: 1 at center, 0 at edges
         const painterliness = 1 - (dist / maxDist);
         
-        // Always draw flat base layer using native p5, opacity inverse of painterliness
-        push();
-        noStroke();
-        const baseOpacity = (1 - painterliness) * 255;  // 255 at edges, 0 at center
-        const c = color(baseColor);
-        c.setAlpha(baseOpacity);
-        fill(c);
-        rect(b.x, b.y, b.w, b.h);
-        pop();
-        
-        // Draw watercolor layer on top, intensity scaled by painterliness
-        if (painterliness > 0.05) {
-          brush.fill(baseColor, painterliness * 120);
-          brush.bleed(painterliness * 0.1, "out");
-          brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
-          brush.rect(
-            b.x + random(-1, 1) * painterliness,
-            b.y + random(-1, 1) * painterliness,
-            b.w + random(-2, 2) * painterliness,
-            b.h + random(-2, 2) * painterliness
-          );
-        }
+        // Single watercolor layer with params scaled by painterliness
+        brush.fill(baseColor, 150);
+        brush.bleed(painterliness * 0.1, "out");
+        brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
+        brush.rect(
+          b.x + random(-1, 1) * painterliness,
+          b.y + random(-1, 1) * painterliness,
+          b.w + random(-2, 2) * painterliness,
+          b.h + random(-2, 2) * painterliness
+        );
       }
       
       // Force blend layers
