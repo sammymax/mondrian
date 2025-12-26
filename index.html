@@ -76,34 +76,19 @@
     // Recursively subdivide a rectangle
     // Returns an array of final rectangles { x, y, w, h }
     function subdivide(x, y, w, h, depth = 0) {
-      const canSplitH = w >= CONFIG.minCellSize * 2;
-      const canSplitV = h >= CONFIG.minCellSize * 2;
+      // Base case: cell too small or chose not to split
+      const tooSmall = w < CONFIG.minCellSize || h < CONFIG.minCellSize;
       const shouldSplit = Math.random() < CONFIG.splitChance;
       
-      // Base case: can't split or chose not to
-      if ((!canSplitH && !canSplitV) || !shouldSplit) {
+      if (tooSmall || !shouldSplit) {
         return [{ x, y, w, h }];
       }
       
-      // Decide split direction
-      let splitHorizontal;
-      if (canSplitH && canSplitV) {
-        splitHorizontal = w > h ? true : h > w ? false : Math.random() < 0.5;
-      } else {
-        splitHorizontal = canSplitH;
-      }
+      // Decide split direction (prefer splitting the longer dimension)
+      const splitHorizontal = w > h ? true : h > w ? false : Math.random() < 0.5;
       
-      // Determine how many splits (2-4 pieces)
-      const dimension = splitHorizontal ? w : h;
-      const maxPossibleSplits = Math.floor(dimension / CONFIG.minCellSize);
-      const numPieces = Math.min(
-        maxPossibleSplits,
-        Math.floor(random(CONFIG.minSplits, CONFIG.maxSplits + 1))
-      );
-      
-      if (numPieces < 2) {
-        return [{ x, y, w, h }];
-      }
+      // Determine how many pieces (2-4)
+      const numPieces = Math.floor(random(CONFIG.minSplits, CONFIG.maxSplits + 1));
       
       // Generate split points
       const [minRatio, maxRatio] = CONFIG.splitRatio;
@@ -113,20 +98,6 @@
         splitPoints.push(random(minRatio, maxRatio));
       }
       splitPoints.sort((a, b) => a - b);
-      
-      // Ensure minimum spacing between splits
-      const minSpacing = CONFIG.minCellSize / dimension;
-      let valid = splitPoints[0] >= minSpacing;
-      for (let i = 1; i < splitPoints.length && valid; i++) {
-        if (splitPoints[i] - splitPoints[i-1] < minSpacing) valid = false;
-      }
-      if (splitPoints.length > 0 && 1 - splitPoints[splitPoints.length-1] < minSpacing) valid = false;
-      
-      // Fall back to single split if spacing invalid
-      if (!valid) {
-        splitPoints.length = 0;
-        splitPoints.push(random(minRatio, maxRatio));
-      }
       
       // Create child rectangles
       const results = [];
