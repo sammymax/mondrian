@@ -79,6 +79,7 @@
         blue: ['#0055ff', '#2979ff', '#0044cc'],
         black: ['#1a1a1a', '#212121'],
         lightBlue: ['#40c4ff', '#00b0ff', '#80d8ff'],
+        white: ['#ffffff', '#fafafa', '#f5f5f5'],
       };
       
       const pick = arr => arr[Math.floor(random() * arr.length)];
@@ -139,7 +140,6 @@
       }
       
       // Color blocks via quadtree subdivision
-      const colorKeys = ['red', 'yellow', 'blue', 'red', 'yellow', 'blue', 'black', 'lightBlue'];
       const blocks = [];
       
       function subdivide(x, y, w, h) {
@@ -164,14 +164,42 @@
           subdivide(x, midY, w / 2, h / 2);
           subdivide(midX, midY, w / 2, h / 2);
         } else {
-          // Terminal node - add as block
-          const col = colorKeys[Math.floor(random() * colorKeys.length)];
-          blocks.push({ x, y, w, h, col });
+          // Terminal node - add as block (color assigned later)
+          blocks.push({ x, y, w, h, col: null });
         }
       }
       
       // Start with full canvas
       subdivide(0, 0, width, height);
+      
+      // Create color pool with proportions (white most common)
+      const colorProportions = {
+        white: 10,
+        red: 3,
+        yellow: 3,
+        blue: 3,
+        black: 2,
+        lightBlue: 2,
+      };
+      
+      // Build color list based on proportions
+      let colorPool = [];
+      for (const [col, count] of Object.entries(colorProportions)) {
+        for (let i = 0; i < count; i++) {
+          colorPool.push(col);
+        }
+      }
+      
+      // Shuffle the color pool
+      for (let i = colorPool.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [colorPool[i], colorPool[j]] = [colorPool[j], colorPool[i]];
+      }
+      
+      // Assign colors to blocks, cycling through pool if needed
+      for (let i = 0; i < blocks.length; i++) {
+        blocks[i].col = colorPool[i % colorPool.length];
+      }
       
       // Draw color blocks - watercolor params scaled by distance from center
       brush.noStroke();
