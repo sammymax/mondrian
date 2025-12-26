@@ -28,7 +28,7 @@
       // Subdivision behavior
       minSplitArea: 120 * 120,   // Below this area: never split (0%)
       maxSplitArea: 500 * 500,   // Above this area: always split (100%)
-      splitRatio: [0.1, 0.9],    // Range for where to place splits (0-1)
+      minSplitPixels: 40,        // Minimum pixels per piece when splitting
       minSplits: 2,              // Minimum number of pieces per split
       maxSplits: 4,              // Maximum number of pieces per split
       
@@ -113,14 +113,27 @@
       // Determine how many pieces (2-4)
       const numPieces = Math.floor(random(CONFIG.minSplits, CONFIG.maxSplits + 1));
       
-      // Generate split points
-      const [minRatio, maxRatio] = CONFIG.splitRatio;
+      // Generate piece sizes: each gets minSplitPixels + random share of remainder
+      const dimension = splitHorizontal ? w : h;
+      const reserved = numPieces * CONFIG.minSplitPixels;
+      const extra = dimension - reserved;
+      
+      // Random weights for distributing extra space
+      const weights = [];
+      for (let i = 0; i < numPieces; i++) {
+        weights.push(Math.random());
+      }
+      const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+      
+      // Calculate piece sizes and convert to split points
       const splitPoints = [];
+      let cumulative = 0;
       
       for (let i = 0; i < numPieces - 1; i++) {
-        splitPoints.push(random(minRatio, maxRatio));
+        const size = CONFIG.minSplitPixels + (weights[i] / totalWeight) * extra;
+        cumulative += size;
+        splitPoints.push(cumulative / dimension);
       }
-      splitPoints.sort((a, b) => a - b);
       
       // Create child rectangles
       const results = [];
