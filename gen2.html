@@ -240,16 +240,28 @@
         
         const baseColor = pick(colors[colorKey]);
         
-        // Single watercolor layer with params scaled by painterliness
-        brush.fill(baseColor, 150);
-        brush.bleed(painterliness * 0.5, "out");
-        brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
-        brush.rect(
-          b.x + random(-1, 1) * painterliness,
-          b.y + random(-1, 1) * painterliness,
-          b.w + random(-2, 2) * painterliness,
-          b.h + random(-2, 2) * painterliness
-        );
+        // Check if block touches outer border
+        const touchesBorder = b.x <= 0 || b.y <= 0 || b.x + b.w >= width || b.y + b.h >= height;
+        
+        if (touchesBorder) {
+          // Standard solid fill for border blocks
+          push();
+          noStroke();
+          fill(baseColor);
+          rect(b.x, b.y, b.w, b.h);
+          pop();
+        } else {
+          // Single watercolor layer with params scaled by painterliness
+          brush.fill(baseColor, 150);
+          brush.bleed(painterliness * 0.5, "out");
+          brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
+          brush.rect(
+            b.x + random(-1, 1) * painterliness,
+            b.y + random(-1, 1) * painterliness,
+            b.w + random(-2, 2) * painterliness,
+            b.h + random(-2, 2) * painterliness
+          );
+        }
       }
       
       // Force blend layers
