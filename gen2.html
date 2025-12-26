@@ -237,8 +237,8 @@
         const normY = (rectCenterY - canvasCenterY) / maxDistY;
         const dist = Math.sqrt(normX * normX + normY * normY);
         
-        // Painterliness: 1 at center, 0 at edges (raised to 2.5 power for sharper falloff)
-        const painterliness = Math.pow(Math.max(0, 1 - dist), 2.5);
+        // Painterliness: 1 at center, 0 at edges (linear)
+        const painterliness = Math.max(0, 1 - dist);
         
         // Sample color based on painterliness (sqrt to shift distribution)
         const colorKey = sampleColor(Math.sqrt(painterliness));
@@ -261,7 +261,7 @@
         } else {
           // Single watercolor layer with params scaled by painterliness
           brush.fill(baseColor, 150);
-          brush.bleed(painterliness * 0.5, "out");
+          brush.bleed(Math.pow(painterliness, 2) * 0.5, "out");
           brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
           brush.rect(
             b.x + random(-1, 1) * painterliness,
