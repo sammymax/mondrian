@@ -32,13 +32,14 @@
     .secondary { background: #444; color: white; }
     .secondary:hover { background: #555; }
     #seed { color: #666; font-size: 12px; }
+    #seed a { color: #888; text-decoration: none; }
+    #seed a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <h1>Procedural Mondrian</h1>
   <div id="canvas-container"></div>
   <div class="controls">
-    <button class="primary" onclick="regenerate()">Generate New</button>
     <button class="secondary" onclick="download()">Download PNG</button>
   </div>
   <div id="seed"></div>
@@ -46,25 +47,33 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@1.1.4/dist/p5.brush.min.js"></script>
   <script>
-    let currentSeed = Date.now();
+    // Get seed from URL or generate one
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialSeed = urlParams.get('seed') ? parseInt(urlParams.get('seed')) : Date.now();
+    console.log(`[${new Date().toISOString()}] Initial seed: ${initialSeed}`);
+    
+    function log(msg) {
+      console.log(`[${new Date().toISOString()}] ${msg}`);
+    }
     
     function setup() {
+      log('Setup started');
       let canvas = createCanvas(1200, 1200, WEBGL);
       canvas.parent('canvas-container');
       brush.load();
       noLoop();
-      generate();
+      log('Setup complete');
+      generate(initialSeed);
     }
     
-    function regenerate() {
-      currentSeed = Date.now();
-      generate();
-    }
-    
-    function generate() {
-      document.getElementById('seed').textContent = 'Seed: ' + currentSeed;
-      brush.seed(currentSeed);
-      randomSeed(currentSeed);
+    function generate(seed) {
+      log(`Generation started with seed: ${seed}`);
+      document.getElementById('seed').textContent = 'Seed: ' + seed;
+      // Seed RNGs
+      brush.seed(seed);
+      randomSeed(seed);
+      noiseSeed(seed);
+      log('RNGs seeded');
       
       // Reset transformations and offset for WEBGL coordinates
       resetMatrix();
@@ -72,6 +81,7 @@
       
       // Background
       background('#f8f5ef');
+      log('Background drawn');
       
       const colors = {
         red: ['#e31c25', '#ff1744', '#d50000'],
@@ -122,6 +132,7 @@
       
       // Start with full canvas
       subdivide(0, 0, width, height);
+      log(`Quadtree subdivision complete: ${blocks.length} blocks, ${potentialLines.length} potential lines`);
       
       // ===== SELECT LINES FROM QUADTREE =====
       const lines = [];
@@ -144,6 +155,7 @@
           });
         }
       }
+      log(`Lines selected: ${lines.length} lines`);
       
       // ===== ASSIGN COLORS =====
       // Create color pool with proportions (white most common)
@@ -174,11 +186,13 @@
       for (let i = 0; i < blocks.length; i++) {
         blocks[i].col = colorPool[i % colorPool.length];
       }
+      log('Colors assigned');
       
       // ===== DRAW BLOCKS =====
       // Watercolor params scaled by distance from center
       brush.noStroke();
       brush.noHatch();
+      log('Starting to draw blocks...');
       
       for (const b of blocks) {
         const baseColor = pick(colors[b.col]);
@@ -212,10 +226,13 @@
       }
       
       // Force blend layers
+      log('Blocks drawn, starting reBlend...');
       brush.reBlend();
+      log('reBlend complete');
       
       // ===== DRAW LINES =====
       // Add custom oil paint brush with bristle texture and pressure variation
+      log('Setting up line brush...');
       brush.add("oilpaint", {
         type: "custom",
         weight: 12,
@@ -238,6 +255,7 @@
         },
         rotate: "natural"
       });
+      log('Line brush created, drawing lines...');
       
       // Draw black lines with multiple passes for richness
       for (const l of lines) {
@@ -254,7 +272,9 @@
         );
       }
       
+      log('Lines drawn, starting reDraw...');
       brush.reDraw();
+      log('Generation complete');
     }
     
     function download() {
