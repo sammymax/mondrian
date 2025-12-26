@@ -139,21 +139,21 @@
       const lines = [];
       const canvasCenterX = width / 2;
       const canvasCenterY = height / 2;
-      const maxLineDist = Math.min(canvasCenterX, canvasCenterY);
+      const maxLineDistX = canvasCenterX;
+      const maxLineDistY = canvasCenterY;
       
       for (const pl of potentialLines) {
         // Calculate center of this line
         const lineCenterX = (pl.x1 + pl.x2) / 2;
         const lineCenterY = (pl.y1 + pl.y2) / 2;
         
-        // Calculate distance from canvas center (normalized 0-1)
-        const dist = Math.sqrt(
-          Math.pow(lineCenterX - canvasCenterX, 2) + 
-          Math.pow(lineCenterY - canvasCenterY, 2)
-        );
+        // Calculate elliptical distance from canvas center (normalized 0-1)
+        const normX = (lineCenterX - canvasCenterX) / maxLineDistX;
+        const normY = (lineCenterY - canvasCenterY) / maxLineDistY;
+        const dist = Math.sqrt(normX * normX + normY * normY);
         
         // Edgeness: 0 at center, 1 at edges
-        const edgeness = Math.min(1, dist / maxLineDist);
+        const edgeness = Math.min(1, dist);
         
         // Probability: higher at edges (5% at center, 95% at edges, quadratic)
         const prob = 0.05 + edgeness * edgeness * 0.9;
@@ -226,17 +226,19 @@
         const rectCenterX = b.x + b.w / 2;
         const rectCenterY = b.y + b.h / 2;
         
-        // Calculate distance from canvas center (normalized 0-1)
+        // Calculate distance from canvas center (normalized 0-1, elliptical)
         const canvasCenterX = width / 2;
         const canvasCenterY = height / 2;
-        const maxDist = Math.min(canvasCenterX, canvasCenterY);
-        const dist = Math.sqrt(
-          Math.pow(rectCenterX - canvasCenterX, 2) + 
-          Math.pow(rectCenterY - canvasCenterY, 2)
-        );
+        const maxDistX = canvasCenterX;
+        const maxDistY = canvasCenterY;
+        
+        // Elliptical distance: normalize x and y separately
+        const normX = (rectCenterX - canvasCenterX) / maxDistX;
+        const normY = (rectCenterY - canvasCenterY) / maxDistY;
+        const dist = Math.sqrt(normX * normX + normY * normY);
         
         // Painterliness: 1 at center, 0 at edges (raised to 2.5 power for sharper falloff)
-        const painterliness = Math.pow(Math.max(0, 1 - (dist / maxDist)), 2.5);
+        const painterliness = Math.pow(Math.max(0, 1 - dist), 2.5);
         
         // Sample color based on painterliness (sqrt to shift distribution)
         const colorKey = sampleColor(Math.sqrt(painterliness));
