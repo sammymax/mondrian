@@ -57,16 +57,33 @@
       return Math.random() * (max - min) + min;
     }
     
-    // Pick a color based on weights
-    function pickColor() {
-      const totalWeight = CONFIG.colors.reduce((sum, c) => sum + c.weight, 0);
-      let rand = Math.random() * totalWeight;
-      
-      for (const c of CONFIG.colors) {
-        rand -= c.weight;
-        if (rand <= 0) return c.color;
+    // Shuffle an array in place (Fisher-Yates)
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
       }
-      return CONFIG.colors[0].color;
+      return arr;
+    }
+    
+    // Generate color assignments for n cells based on weights
+    function generateColors(n) {
+      const totalWeight = CONFIG.colors.reduce((sum, c) => sum + c.weight, 0);
+      const colors = [];
+      
+      // Assign counts based on weights
+      for (const c of CONFIG.colors) {
+        const count = Math.round(n * c.weight / totalWeight);
+        for (let i = 0; i < count; i++) {
+          colors.push(c.color);
+        }
+      }
+      
+      // Adjust if rounding gave us wrong total (fill or trim with first color)
+      while (colors.length < n) colors.push(CONFIG.colors[0].color);
+      while (colors.length > n) colors.pop();
+      
+      return shuffle(colors);
     }
 
     // Inverse lerp: returns 0-1 based on where value falls in range
@@ -142,13 +159,14 @@
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
       
-      // Generate rectangles
+      // Generate rectangles and colors
       const rects = subdivide(0, 0, canvas.width, canvas.height);
+      const colors = generateColors(rects.length);
       
       // Draw filled rectangles
-      for (const r of rects) {
-        ctx.fillStyle = pickColor();
-        ctx.fillRect(r.x, r.y, r.w, r.h);
+      for (let i = 0; i < rects.length; i++) {
+        ctx.fillStyle = colors[i];
+        ctx.fillRect(rects[i].x, rects[i].y, rects[i].w, rects[i].h);
       }
       
       // Draw black outlines on top
