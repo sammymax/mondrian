@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mondrian Generator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      background: #000; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script>
+    // ===========================================
+    // TWEAKABLE PARAMETERS
+    // ===========================================
+    
+    const CONFIG = {
+      // Subdivision behavior
+      splitChance: 0.85,        // Probability of splitting a cell (0-1)
+      minCellSize: 60,          // Minimum cell dimension before stopping
+      splitRatio: [0.3, 0.7],   // Range for where to place the split (0-1)
+      
+      // Line styling
+      lineWidth: 6,             // Thickness of black dividing lines
+      lineColor: '#000000',
+      
+      // Colors and their relative weights
+      colors: [
+        { color: '#FFFFFF', weight: 10 },  // White (most common)
+        { color: '#D40920', weight: 2 },   // Red
+        { color: '#1356A2', weight: 2 },   // Blue
+        { color: '#F7D842', weight: 2 },   // Yellow
+      ],
+      
+      // Canvas padding from edge
+      padding: 20,
+    };
+
+    // ===========================================
+    // UTILITY FUNCTIONS
+    // ===========================================
+    
+    // Random float between min and max
+    function random(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+    
+    // Pick a color based on weights
+    function pickColor() {
+      const totalWeight = CONFIG.colors.reduce((sum, c) => sum + c.weight, 0);
+      let rand = Math.random() * totalWeight;
+      
+      for (const c of CONFIG.colors) {
+        rand -= c.weight;
+        if (rand <= 0) return c.color;
+      }
+      return CONFIG.colors[0].color;
+    }
+
+    // ===========================================
+    // SUBDIVISION ALGORITHM
+    // ===========================================
+    
+    // Recursively subdivide a rectangle
+    // Returns an array of final rectangles { x, y, w, h }
+    function subdivide(x, y, w, h, depth = 0) {
+      const canSplitH = w >= CONFIG.minCellSize * 2;
+      const canSplitV = h >= CONFIG.minCellSize * 2;
+      const shouldSplit = Math.random() < CONFIG.splitChance;
+      
+      // Base case: can't split or chose not to
+      if ((!canSplitH && !canSplitV) || !shouldSplit) {
+        return [{ x, y, w, h }];
+      }
+      
+      // Decide split direction
+      let splitHorizontal;
+      if (canSplitH && canSplitV) {
+        // Prefer splitting the longer dimension
+        splitHorizontal = w > h ? true : h > w ? false : Math.random() < 0.5;
+      } else {
+        splitHorizontal = canSplitH;
+      }
+      
+      // Calculate split position
+      const [minRatio, maxRatio] = CONFIG.splitRatio;
+      
+      if (splitHorizontal) {
+        const splitX = x + w * random(minRatio, maxRatio);
+        const leftW = splitX - x;
+        const rightW = w - leftW;
+        
+        return [
+          ...subdivide(x, y, leftW, h, depth + 1),
+          ...subdivide(splitX, y, rightW, h, depth + 1),
+        ];
+      } else {
+        const splitY = y + h * random(minRatio, maxRatio);
+        const topH = splitY - y;
+        const bottomH = h - topH;
+        
+        return [
+          ...subdivide(x, y, w, topH, depth + 1),
+          ...subdivide(x, splitY, w, bottomH, depth + 1),
+        ];
+      }
+    }
+
+    // ===========================================
+    // RENDERING
+    // ===========================================
+    
+    function render() {
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Size canvas to window
+      const size = Math.min(window.innerWidth, window.innerHeight) - CONFIG.padding * 2;
+      canvas.width = size;
+      canvas.height = size;
+      
+      // Generate rectangles
+      const rects = subdivide(0, 0, size, size);
+      
+      // Draw filled rectangles
+      for (const r of rects) {
+        ctx.fillStyle = pickColor();
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+      }
+      
+      // Draw black outlines on top
+      ctx.strokeStyle = CONFIG.lineColor;
+      ctx.lineWidth = CONFIG.lineWidth;
+      
+      for (const r of rects) {
+        ctx.strokeRect(r.x, r.y, r.w, r.h);
+      }
+      
+      // Draw outer border
+      ctx.strokeRect(0, 0, size, size);
+    }
+
+    // ===========================================
+    // INITIALIZATION
+    // ===========================================
+    
+    render();
+    
+    // Regenerate on click or resize
+    window.addEventListener('click', render);
+    window.addEventListener('resize', render);
+  </script>
+</body>
+</html>
