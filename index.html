@@ -29,6 +29,8 @@
       splitChance: 0.85,        // Probability of splitting a cell (0-1)
       minCellSize: 60,          // Minimum cell dimension before stopping
       splitRatio: [0.1, 0.9],   // Range for where to place the split (0-1)
+      minSplits: 2,             // Minimum number of splits
+      maxSplits: 4,             // Maximum number of splits
       
       // Line styling
       lineWidth: 6,             // Thickness of black dividing lines
@@ -86,34 +88,69 @@
       // Decide split direction
       let splitHorizontal;
       if (canSplitH && canSplitV) {
-        // Prefer splitting the longer dimension
         splitHorizontal = w > h ? true : h > w ? false : Math.random() < 0.5;
       } else {
         splitHorizontal = canSplitH;
       }
       
-      // Calculate split position
-      const [minRatio, maxRatio] = CONFIG.splitRatio;
+      // Determine how many splits (2-4 pieces)
+      const dimension = splitHorizontal ? w : h;
+      const maxPossibleSplits = Math.floor(dimension / CONFIG.minCellSize);
+      const numPieces = Math.min(
+        maxPossibleSplits,
+        Math.floor(random(CONFIG.minSplits, CONFIG.maxSplits + 1))
+      );
       
-      if (splitHorizontal) {
-        const splitX = x + w * random(minRatio, maxRatio);
-        const leftW = splitX - x;
-        const rightW = w - leftW;
-        
-        return [
-          ...subdivide(x, y, leftW, h, depth + 1),
-          ...subdivide(splitX, y, rightW, h, depth + 1),
-        ];
-      } else {
-        const splitY = y + h * random(minRatio, maxRatio);
-        const topH = splitY - y;
-        const bottomH = h - topH;
-        
-        return [
-          ...subdivide(x, y, w, topH, depth + 1),
-          ...subdivide(x, splitY, w, bottomH, depth + 1),
-        ];
+      if (numPieces < 2) {
+        return [{ x, y, w, h }];
       }
+      
+      // Generate split points
+      const [minRatio, maxRatio] = CONFIG.splitRatio;
+      const splitPoints = [];
+      
+      for (let i = 0; i < numPieces - 1; i++) {
+        splitPoints.push(random(minRatio, maxRatio));
+      }
+      splitPoints.sort((a, b) => a - b);
+      
+      // Ensure minimum spacing between splits
+      const minSpacing = CONFIG.minCellSize / dimension;
+      let valid = splitPoints[0] >= minSpacing;
+      for (let i = 1; i < splitPoints.length && valid; i++) {
+        if (splitPoints[i] - splitPoints[i-1] < minSpacing) valid = false;
+      }
+      if (splitPoints.length > 0 && 1 - splitPoints[splitPoints.length-1] < minSpacing) valid = false;
+      
+      // Fall back to single split if spacing invalid
+      if (!valid) {
+        splitPoints.length = 0;
+        splitPoints.push(random(minRatio, maxRatio));
+      }
+      
+      // Create child rectangles
+      const results = [];
+      let prev = 0;
+      
+      for (const ratio of splitPoints) {
+        if (splitHorizontal) {
+          const childW = (ratio - prev) * w;
+          results.push(...subdivide(x + prev * w, y, childW, h, depth + 1));
+        } else {
+          const childH = (ratio - prev) * h;
+          results.push(...subdivide(x, y + prev * h, w, childH, depth + 1));
+        }
+        prev = ratio;
+      }
+      
+      // Final piece
+      if (splitHorizontal) {
+        results.push(...subdivide(x + prev * w, y, (1 - prev) * w, h, depth + 1));
+      } else {
+        results.push(...subdivide(x, y + prev * h, w, (1 - prev) * h, depth + 1));
+      }
+      
+      return results;
     }
 
     // ===========================================
