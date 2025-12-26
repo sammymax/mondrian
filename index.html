@@ -110,11 +110,20 @@
       // Decide split direction (prefer splitting the longer dimension)
       const splitHorizontal = w > h ? true : h > w ? false : Math.random() < 0.5;
       
-      // Determine how many pieces (2-4)
-      const numPieces = Math.floor(random(CONFIG.minSplits, CONFIG.maxSplits + 1));
+      // Determine how many pieces (2-4, capped by available space)
+      const dimension = splitHorizontal ? w : h;
+      const maxPieces = Math.floor(dimension / CONFIG.minSplitPixels);
+      const numPieces = Math.min(
+        maxPieces,
+        Math.floor(random(CONFIG.minSplits, CONFIG.maxSplits + 1))
+      );
+      
+      // Not enough room to split
+      if (numPieces < 2) {
+        return [{ x, y, w, h }];
+      }
       
       // Generate piece sizes: each gets minSplitPixels + random share of remainder
-      const dimension = splitHorizontal ? w : h;
       const reserved = numPieces * CONFIG.minSplitPixels;
       const extra = dimension - reserved;
       
