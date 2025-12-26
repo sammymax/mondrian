@@ -49,7 +49,7 @@
     let currentSeed = Date.now();
     
     function setup() {
-      let canvas = createCanvas(600, 600, WEBGL);
+      let canvas = createCanvas(1200, 1200, WEBGL);
       canvas.parent('canvas-container');
       brush.load();
       noLoop();
@@ -190,18 +190,18 @@
         // Calculate distance from canvas center (normalized 0-1)
         const canvasCenterX = width / 2;
         const canvasCenterY = height / 2;
-        const maxDist = Math.sqrt(canvasCenterX * canvasCenterX + canvasCenterY * canvasCenterY);
+        const maxDist = Math.min(canvasCenterX, canvasCenterY);
         const dist = Math.sqrt(
           Math.pow(rectCenterX - canvasCenterX, 2) + 
           Math.pow(rectCenterY - canvasCenterY, 2)
         );
         
-        // Painterliness: 1 at center, 0 at edges (squared for sharper falloff)
-        const painterliness = Math.pow(1 - (dist / maxDist), 2);
+        // Painterliness: 1 at center, 0 at edges (raised to 2.5 power for sharper falloff)
+        const painterliness = Math.pow(1 - (dist / maxDist), 2.5);
         
         // Single watercolor layer with params scaled by painterliness
         brush.fill(baseColor, 150);
-        brush.bleed(painterliness * 0.1, "out");
+        brush.bleed(painterliness * 0.5, "out");
         brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
         brush.rect(
           b.x + random(-1, 1) * painterliness,
