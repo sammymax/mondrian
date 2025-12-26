@@ -26,8 +26,8 @@
     
     const CONFIG = {
       // Subdivision behavior
-      minSplitArea: 120 * 120,   // Below this area: never split (0%)
-      maxSplitArea: 500 * 500,   // Above this area: always split (100%)
+      minSplitSize: 120,         // Below this sqrt(area): never split (0%)
+      maxSplitSize: 500,         // Above this sqrt(area): always split (100%)
       minSplitPixels: 40,        // Minimum pixels per piece when splitting
       minSplits: 2,              // Minimum number of pieces per split
       maxSplits: 4,              // Maximum number of pieces per split
@@ -38,7 +38,7 @@
       
       // Colors and their relative weights
       colors: [
-        { color: '#FFFFFF', weight: 10 },  // White (most common)
+        { color: '#FFFFFF', weight: 6 },   // White (most common)
         { color: '#D40920', weight: 2 },   // Red
         { color: '#1356A2', weight: 2 },   // Blue
         { color: '#F7D842', weight: 2 },   // Yellow
@@ -98,9 +98,9 @@
     // Recursively subdivide a rectangle
     // Returns an array of final rectangles { x, y, w, h }
     function subdivide(x, y, w, h, depth = 0) {
-      // Calculate split probability based on area
-      const area = w * h;
-      const splitProbability = inverseLerp(area, CONFIG.minSplitArea, CONFIG.maxSplitArea);
+      // Calculate split probability based on cell size
+      const size = Math.sqrt(w * h);
+      const splitProbability = inverseLerp(size, CONFIG.minSplitSize, CONFIG.maxSplitSize);
       const shouldSplit = Math.random() < splitProbability;
       
       if (!shouldSplit) {
