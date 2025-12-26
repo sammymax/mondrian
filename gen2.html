@@ -56,7 +56,7 @@
     
     function setup() {
       debugLog('Setup started');
-      let canvas = createCanvas(1200, 1200, WEBGL);
+      let canvas = createCanvas(2400, 1200, WEBGL);
       canvas.parent('canvas-container');
       brush.load();
       noLoop();
@@ -130,8 +130,9 @@
         }
       }
       
-      // Start with full canvas
-      subdivide(0, 0, width, height);
+      // Start with two squares side by side
+      subdivide(0, 0, height, height);
+      subdivide(height, 0, height, height);
       debugLog(`Quadtree subdivision complete: ${blocks.length} blocks, ${potentialLines.length} potential lines`);
       
       // ===== SELECT LINES FROM QUADTREE =====
