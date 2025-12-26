@@ -75,8 +75,8 @@
       
       // Add subtle paper texture
       for (let i = 0; i < 30000; i++) {
-        stroke(0, random(8));
-        point(random(width), random(height));
+        // stroke(0, random(8));
+        // point(random(width), random(height));
       }
       
       const colors = {
@@ -146,7 +146,7 @@
       
       // Color blocks
       const colorKeys = ['red', 'yellow', 'blue', 'red', 'yellow', 'blue', 'black', 'lightBlue'];
-      const numBlocks = 10 + Math.floor(random() * 8);
+      const numBlocks = 20;
       const blocks = [];
       
       for (let i = 0; i < numBlocks; i++) {
@@ -165,37 +165,93 @@
         if (!overlap) blocks.push({ x, y, w, h, col });
       }
       
-      // Draw color blocks with watercolor fill
+      // Draw color blocks with painterliness based on distance from center
       brush.noStroke();
       brush.noHatch();
       
       for (const b of blocks) {
         const baseColor = pick(colors[b.col]);
         
-        // Watercolor fill settings - low bleed for cleaner rectangles
-        brush.fill(baseColor, random(90, 150));
-        brush.bleed(random(0.01, 0.04), "out");
-        brush.fillTexture(random(0.5, 0.8), random(0.1, 0.25));
+        // Calculate center of this rectangle
+        const rectCenterX = b.x + b.w / 2;
+        const rectCenterY = b.y + b.h / 2;
         
-        // Draw with slight offset for hand-painted feel
-        brush.rect(
-          b.x + random(-3, 3), 
-          b.y + random(-3, 3), 
-          b.w + random(-4, 4), 
-          b.h + random(-4, 4)
+        // Calculate distance from canvas center (normalized 0-1)
+        const canvasCenterX = width / 2;
+        const canvasCenterY = height / 2;
+        const maxDist = Math.sqrt(canvasCenterX * canvasCenterX + canvasCenterY * canvasCenterY);
+        const dist = Math.sqrt(
+          Math.pow(rectCenterX - canvasCenterX, 2) + 
+          Math.pow(rectCenterY - canvasCenterY, 2)
         );
+        
+        // Painterliness: 1 at center, 0 at edges
+        const painterliness = 1 - (dist / maxDist);
+        
+        // Always draw flat base layer using native p5, opacity inverse of painterliness
+        push();
+        noStroke();
+        const baseOpacity = (1 - painterliness) * 255;  // 255 at edges, 0 at center
+        const c = color(baseColor);
+        c.setAlpha(baseOpacity);
+        fill(c);
+        rect(b.x, b.y, b.w, b.h);
+        pop();
+        
+        // Draw watercolor layer on top, intensity scaled by painterliness
+        if (painterliness > 0.05) {
+          brush.fill(baseColor, painterliness * 120);
+          brush.bleed(painterliness * 0.1, "out");
+          brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
+          brush.rect(
+            b.x + random(-1, 1) * painterliness,
+            b.y + random(-1, 1) * painterliness,
+            b.w + random(-2, 2) * painterliness,
+            b.h + random(-2, 2) * painterliness
+          );
+        }
       }
       
       // Force blend layers
       brush.reBlend();
       
-      // Draw black lines on top with charcoal/pen brushes
-      const lineBrushes = ['charcoal', '2B', 'HB', 'pen'];
+      // Add custom oil paint brush with bristle texture and pressure variation
+      brush.add("oilpaint", {
+        type: "custom",
+        weight: 12,
+        vibration: 0.2,
+        opacity: 230,
+        spacing: 0.3,
+        blend: false,
+        pressure: {
+          type: "custom",
+          min_max: [0.5, 1.15],
+          // Creates natural thick-thin variation along stroke
+          curve: (x) => 0.6 + 0.4 * Math.sin(x * Math.PI * 0.9)
+        },
+        tip: (_m) => {
+          // Simulate flat brush with bristle texture (multiple thin rects with gaps)
+          _m.rect(-5, -1.2, 2.2, 2.4);
+          _m.rect(-2.2, -1.1, 1.8, 2.2);
+          _m.rect(0.1, -1.3, 2, 2.6);
+          _m.rect(2.6, -1.0, 2.2, 2.0);
+        },
+        rotate: "natural"
+      });
       
+      // Draw black lines with multiple passes for richness
       for (const l of lines) {
-        const brushType = pick(lineBrushes);
-        brush.set(brushType, '#0a0a0a', l.t);
+        // Main stroke
+        brush.set('oilpaint', '#000000', l.t);
         brush.line(l.x1, l.y1, l.x2, l.y2);
+        // Second pass slightly offset for paint buildup
+        brush.set('oilpaint', '#0a0a0a', l.t * 0.7);
+        brush.line(
+          l.x1 + random(-0.3, 0.3), 
+          l.y1 + random(-0.3, 0.3), 
+          l.x2 + random(-0.3, 0.3), 
+          l.y2 + random(-0.3, 0.3)
+        );
       }
       
       brush.reDraw();
