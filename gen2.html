@@ -52,7 +52,9 @@
     // Get seed from URL or generate one
     const urlParams = new URLSearchParams(window.location.search);
     const initialSeed = urlParams.get('seed') ? parseInt(urlParams.get('seed')) : Date.now();
+    const dpi = urlParams.get('dpi') ? parseFloat(urlParams.get('dpi')) : null;
     debugLog(`Initial seed: ${initialSeed}`);
+    if (dpi) debugLog(`DPI scale: ${dpi}`);
     
     let swirlShader;
     
@@ -116,6 +118,7 @@
     
     function setup() {
       debugLog('Setup started');
+      if (dpi) pixelDensity(dpi);
       let canvas = createCanvas(2400, 1200, WEBGL);
       canvas.parent('canvas-container');
       
@@ -285,9 +288,13 @@
       // Watercolor params scaled by distance from center
       brush.noStroke();
       brush.noHatch();
-      debugLog('Starting to draw blocks...');
-      
-      for (const b of blocks) {
+      debugLog(`Starting to draw ${blocks.length} blocks...`);
+
+      for (let i = 0; i < blocks.length; i++) {
+        const b = blocks[i];
+        if (i % 10 === 0) {
+          debugLog(`Drawing block ${i + 1}/${blocks.length}`);
+        }
         // Calculate center of this rectangle
         const rectCenterX = b.x + b.w / 2;
         const rectCenterY = b.y + b.h / 2;
