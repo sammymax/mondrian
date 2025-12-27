@@ -87,6 +87,8 @@ def sample_color(painterliness):
 
 def subdivide(x, y, w, h, blocks, potential_lines):
     """Recursively subdivide a rectangle into quadrants."""
+    # Use integers throughout to avoid off-by-one errors
+    x, y, w, h = int(x), int(y), int(w), int(h)
     min_side = min(w, h)
 
     if min_side >= 200:
@@ -97,14 +99,21 @@ def subdivide(x, y, w, h, blocks, potential_lines):
         prob = (min_side - 20) / (200.0 - 20.0)
 
     if random.random() < prob:
-        mid_x = x + w / 2.0
-        mid_y = y + h / 2.0
+        # Integer division for clean splits
+        half_w = w // 2
+        half_h = h // 2
+        mid_x = x + half_w
+        mid_y = y + half_h
+        # Remaining width/height for right/bottom quadrants
+        rem_w = w - half_w
+        rem_h = h - half_h
+
         potential_lines.append({'x1': mid_x, 'y1': y, 'x2': mid_x, 'y2': y + h})
         potential_lines.append({'x1': x, 'y1': mid_y, 'x2': x + w, 'y2': mid_y})
-        subdivide(x, y, w / 2.0, h / 2.0, blocks, potential_lines)
-        subdivide(mid_x, y, w / 2.0, h / 2.0, blocks, potential_lines)
-        subdivide(x, mid_y, w / 2.0, h / 2.0, blocks, potential_lines)
-        subdivide(mid_x, mid_y, w / 2.0, h / 2.0, blocks, potential_lines)
+        subdivide(x, y, half_w, half_h, blocks, potential_lines)
+        subdivide(mid_x, y, rem_w, half_h, blocks, potential_lines)
+        subdivide(x, mid_y, half_w, rem_h, blocks, potential_lines)
+        subdivide(mid_x, mid_y, rem_w, rem_h, blocks, potential_lines)
     else:
         blocks.append({'x': x, 'y': y, 'w': w, 'h': h})
 
@@ -199,7 +208,12 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
             base_color = pick(COLORS[color_key])
             set_foreground_rgb(*base_color)
 
-            # Add jitter for painterly effect
+            # Check if block touches outer border
+            touches_border = (block['x'] <= 0 or block['y'] <= 0 or
+                              block['x'] + block['w'] >= canvas_width or
+                              block['y'] + block['h'] >= canvas_height)
+
+            # Add jitter for painterly effect (more jitter toward center)
             jitter_x = (random.random() * 2 - 1) * painterliness * 0
             jitter_y = (random.random() * 2 - 1) * painterliness * 0
             jitter_w = (random.random() * 4 - 2) * painterliness * 0
@@ -210,8 +224,37 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
             w = max(1, int(block['w'] + jitter_w))
             h = max(1, int(block['h'] + jitter_h))
 
-            image.select_rectangle(Gimp.ChannelOps.REPLACE, x, y, w, h)
-            blocks_layer.edit_fill(Gimp.FillType.FOREGROUND)
+            if touches_border:
+                # Solid fill for border blocks
+                image.select_rectangle(Gimp.ChannelOps.REPLACE, x, y, w, h)
+                blocks_layer.edit_fill(Gimp.FillType.FOREGROUND)
+            else:
+                # Clear any active selection before drawing strokes
+                Gimp.Selection.none(image)
+
+                # Painterly fill using brush strokes
+                brush = Gimp.Brush.get_by_name("Acrylic 01")
+                Gimp.context_set_brush(brush)
+                set_foreground_rgb(*base_color)
+
+                # Bigger painterliness = fatter stroke but less coverage
+                base_stroke_size = 30
+                stroke_size = base_stroke_size + painterliness * 50
+                Gimp.context_set_brush_size(stroke_size)
+
+                # Fewer strokes for higher painterliness
+                min_strokes = 2
+                max_strokes = max(8, int(min(w, h) / 20))
+                num_strokes = int(max_strokes - (max_strokes - min_strokes) * painterliness)
+
+                # Draw horizontal strokes across the rectangle
+                for s in range(num_strokes):
+                    t = (s + 0.5) / num_strokes
+                    stroke_y = y + t * h
+                    stroke_y += (random.random() - 0.5) * stroke_size * 0.3
+
+                    strokes = [x, stroke_y, x + w, stroke_y]
+                    Gimp.pencil(blocks_layer, strokes)
 
             Gimp.progress_update(float(i) / len(blocks) * 0.5)
 
