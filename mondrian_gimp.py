@@ -96,7 +96,7 @@ def subdivide(x, y, w, h, blocks, potential_lines):
     else:
         prob = (min_side - 20) / (200.0 - 20.0)
 
-    if 2 * random.random() < prob:
+    if random.random() < prob:
         mid_x = x + w / 2.0
         mid_y = y + h / 2.0
         potential_lines.append({'x1': mid_x, 'y1': y, 'x2': mid_x, 'y2': y + h})
@@ -145,17 +145,20 @@ def set_foreground_rgb(r, g, b):
     Gimp.context_set_foreground(color)
 
 
-def generate_mondrian(procedure, image, seed, line_thickness):
+def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
     """Core generation logic."""
     log("generate_mondrian started")
     random.seed(seed)
 
-    canvas_width = image.get_width()
-    canvas_height = image.get_height()
+    # Base size is 1200x600, multiplied by size_multiplier
+    # Always 2:1 aspect ratio
+    canvas_height = int(600 * size_multiplier)
+    canvas_width = int(1200 * size_multiplier)
     log("Canvas: {}x{}".format(canvas_width, canvas_height))
 
-    image.undo_group_start()
-    log("undo_group_start done")
+    # Create new image
+    image = Gimp.Image.new(canvas_width, canvas_height, Gimp.ImageBaseType.RGB)
+    log("Image created: {}".format(image))
 
     try:
         # Create blocks layer
@@ -197,10 +200,10 @@ def generate_mondrian(procedure, image, seed, line_thickness):
             set_foreground_rgb(*base_color)
 
             # Add jitter for painterly effect
-            jitter_x = (random.random() * 2 - 1) * painterliness
-            jitter_y = (random.random() * 2 - 1) * painterliness
-            jitter_w = (random.random() * 4 - 2) * painterliness
-            jitter_h = (random.random() * 4 - 2) * painterliness
+            jitter_x = (random.random() * 2 - 1) * painterliness * 0
+            jitter_y = (random.random() * 2 - 1) * painterliness * 0
+            jitter_w = (random.random() * 4 - 2) * painterliness * 0
+            jitter_h = (random.random() * 4 - 2) * painterliness * 0
 
             x = max(0, int(block['x'] + jitter_x))
             y = max(0, int(block['y'] + jitter_y))
@@ -225,40 +228,41 @@ def generate_mondrian(procedure, image, seed, line_thickness):
         image.insert_layer(lines_layer, None, 0)
         lines_layer.fill(Gimp.FillType.TRANSPARENT)
 
-        # Draw lines using PDB
-        pdb = Gimp.get_pdb()
+        # Draw lines
+        log("Drawing {} lines".format(len(lines)))
+
+        # Set black color before drawing lines
+        set_foreground_rgb(0, 0, 0)
+        log("Set foreground to black")
 
         for i, line in enumerate(lines):
             brush_size = line_thickness * line['thickness']
-
-            # Set brush size
             Gimp.context_set_brush_size(brush_size)
-            set_foreground_rgb(0, 0, 0)
 
-            # Use gimp-pencil via PDB
-            pencil_proc = pdb.lookup_procedure('gimp-pencil')
-            if pencil_proc:
-                config = pencil_proc.create_config()
-                config.set_property('drawable', lines_layer)
-                config.set_property('strokes', Gimp.FloatArray.new([
-                    line['x1'], line['y1'], line['x2'], line['y2']
-                ]))
-                pencil_proc.run(config)
+            # Draw line using Gimp.pencil with flat coordinate list
+            strokes = [line['x1'], line['y1'], line['x2'], line['y2']]
+            Gimp.pencil(lines_layer, strokes)
 
             Gimp.progress_update(0.5 + float(i) / max(len(lines), 1) * 0.5)
 
+        # Display the new image
+        display = Gimp.Display.new(image)
         Gimp.displays_flush()
+        log("Image displayed")
 
-    finally:
-        image.undo_group_end()
+    except Exception as e:
+        log("ERROR in generate: " + str(e))
+        log(traceback.format_exc())
+        raise
 
     return procedure.new_return_values(Gimp.PDBStatusType.SUCCESS, GLib.Error())
 
 
-def run(procedure, run_mode, image, layers, config, data):
+def run(procedure, config, data):
     """Main run function."""
     log("=== run() called ===")
     try:
+        run_mode = config.get_property("run-mode")
         if run_mode == Gimp.RunMode.INTERACTIVE:
             log("Interactive mode")
             GimpUi.init("python-fu-procedural-mondrian")
@@ -270,9 +274,10 @@ def run(procedure, run_mode, image, layers, config, data):
 
         seed = config.get_property("seed")
         line_thickness = config.get_property("line-thickness")
-        log("seed={}, thickness={}".format(seed, line_thickness))
+        size_multiplier = config.get_property("size-multiplier")
+        log("seed={}, thickness={}, size={}".format(seed, line_thickness, size_multiplier))
 
-        result = generate_mondrian(procedure, image, seed, line_thickness)
+        result = generate_mondrian(procedure, seed, line_thickness, size_multiplier)
         log("generate_mondrian completed")
         return result
     except Exception as e:
@@ -293,25 +298,28 @@ class ProceduralMondrian(Gimp.PlugIn):
 
     def do_create_procedure(self, name):
         log("do_create_procedure called: " + name)
-        procedure = Gimp.ImageProcedure.new(self, name,
-                                            Gimp.PDBProcType.PLUGIN,
-                                            run, None)
-
-        procedure.set_image_types("*")
-        procedure.set_sensitivity_mask(Gimp.ProcedureSensitivityMask.DRAWABLE)
+        procedure = Gimp.Procedure.new(self, name,
+                                       Gimp.PDBProcType.PLUGIN,
+                                       run, None)
 
         procedure.set_documentation(
             _("Generate a procedural Mondrian-style painting"),
-            _("Creates a Mondrian-inspired artwork using quadtree subdivision"),
+            _("Creates a new image with Mondrian-inspired artwork using quadtree subdivision"),
             name)
         procedure.set_menu_label(_("Procedural Mondrian..."))
         procedure.set_attribution("Translated from gen2.html", "", "2024")
-        procedure.add_menu_path("<Image>/Filters/Render/")
+        procedure.add_menu_path("<Image>/File/Create/")
 
+        procedure.add_enum_argument("run-mode", _("Run mode"),
+                                    _("The run mode"), Gimp.RunMode,
+                                    Gimp.RunMode.INTERACTIVE,
+                                    GObject.ParamFlags.READWRITE)
         procedure.add_int_argument("seed", _("_Seed"), _("Random seed"),
                                    0, 999999, 42, GObject.ParamFlags.READWRITE)
         procedure.add_double_argument("line-thickness", _("Line _Thickness"), _("Base line thickness"),
                                       1.0, 50.0, 8.0, GObject.ParamFlags.READWRITE)
+        procedure.add_double_argument("size-multiplier", _("Size _Multiplier"), _("Size multiplier (base 1200x600)"),
+                                      0.5, 10.0, 2.0, GObject.ParamFlags.READWRITE)
 
         return procedure
 
