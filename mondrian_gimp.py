@@ -10,6 +10,7 @@ import math
 import sys
 import os
 import traceback
+import json
 
 LOG_FILE = os.path.expanduser("~/mondrian.log")
 def log(msg):
@@ -30,6 +31,29 @@ from gi.repository import Gegl
 
 def N_(message): return message
 def _(message): return GLib.dgettext(None, message)
+
+# Path to JSON state file exported from gen2.html
+STATE_JSON_PATH = os.path.expanduser("~/mondrian_state.json")
+
+def load_state_from_json(path):
+    """Load pre-computed state from JSON file exported by gen2.html."""
+    if not os.path.exists(path):
+        log("No state JSON found at {}".format(path))
+        return None
+    try:
+        with open(path, 'r') as f:
+            state = json.load(f)
+        log("Loaded state from JSON: {} blocks, {} lines".format(
+            len(state.get('blocks', [])), len(state.get('lines', []))))
+        return state
+    except Exception as e:
+        log("Error loading state JSON: {}".format(e))
+        return None
+
+def hex_to_rgb(hex_color):
+    """Convert hex color string to RGB tuple."""
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
 
 # =============================================================================
@@ -359,9 +383,10 @@ def select_lines(potential_lines, canvas_width, canvas_height):
 
 
 def set_foreground_rgb(r, g, b):
-    """Set foreground color from RGB (0-255)."""
-    color = Gegl.Color.new("black")
-    color.set_rgba(r / 255.0, g / 255.0, b / 255.0, 1.0)
+    """Set foreground color from RGB (0-255) in sRGB color space."""
+    # Use CSS hex format which GEGL interprets as sRGB
+    hex_color = "#{:02x}{:02x}{:02x}".format(int(r), int(g), int(b))
+    color = Gegl.Color.new(hex_color)
     Gimp.context_set_foreground(color)
 
 
@@ -606,23 +631,115 @@ def draw_watercolor_fill(image, base_layer, vertices, color_rgb, bleed_strength,
     return wc_layer
 
 
+def generate_state(seed, canvas_width, canvas_height):
+    """Generate the mondrian state (blocks and lines) from scratch."""
+    random.seed(seed)
+
+    # Quadtree subdivision
+    raw_blocks = []
+    potential_lines = []
+    half_height = canvas_height
+    subdivide(0, 0, half_height, half_height, raw_blocks, potential_lines)
+    if canvas_width > half_height:
+        subdivide(half_height, 0, min(half_height, canvas_width - half_height),
+                  half_height, raw_blocks, potential_lines)
+
+    # Convert raw blocks to drawable blocks with all computed properties
+    drawable_blocks = []
+    for block in raw_blocks:
+        rect_center_x = block['x'] + block['w'] / 2.0
+        rect_center_y = block['y'] + block['h'] / 2.0
+        painterliness = max(0, 1 - calc_edgeness(rect_center_x, rect_center_y, canvas_width, canvas_height))
+        color_key = sample_color(math.sqrt(painterliness))
+
+        # Skip white blocks
+        if color_key == 'white':
+            continue
+
+        base_color = pick(COLORS[color_key])
+        touches_border = (block['x'] <= 0 or block['y'] <= 0 or
+                          block['x'] + block['w'] >= canvas_width or
+                          block['y'] + block['h'] >= canvas_height)
+
+        drawable_blocks.append({
+            'x': block['x'],
+            'y': block['y'],
+            'w': block['w'],
+            'h': block['h'],
+            'color': base_color,  # RGB tuple
+            'painterliness': painterliness,
+            'touchesBorder': touches_border,
+            'jitterX': random.uniform(-1, 1) * painterliness,
+            'jitterY': random.uniform(-1, 1) * painterliness,
+            'jitterW': random.uniform(-2, 2) * painterliness,
+            'jitterH': random.uniform(-2, 2) * painterliness,
+        })
+
+    lines = select_lines(potential_lines, canvas_width, canvas_height)
+
+    return drawable_blocks, lines
+
+
+def state_from_json(json_state):
+    """Convert JSON state to internal format."""
+    drawable_blocks = []
+    for block in json_state['blocks']:
+        drawable_blocks.append({
+            'x': block['x'],
+            'y': block['y'],
+            'w': block['w'],
+            'h': block['h'],
+            'color': hex_to_rgb(block['color']),  # Convert hex to RGB tuple
+            'painterliness': block['painterliness'],
+            'touchesBorder': block['touchesBorder'],
+            'jitterX': block['jitterX'],
+            'jitterY': block['jitterY'],
+            'jitterW': block['jitterW'],
+            'jitterH': block['jitterH'],
+        })
+
+    # Lines use 't' in JSON, normalize to 'thickness'
+    lines = []
+    for line in json_state['lines']:
+        lines.append({
+            'x1': line['x1'],
+            'y1': line['y1'],
+            'x2': line['x2'],
+            'y2': line['y2'],
+            'thickness': line.get('t', line.get('thickness', 1.0)),
+        })
+
+    return drawable_blocks, lines
+
+
 def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
     """Core generation logic."""
     log("generate_mondrian started")
-    random.seed(seed)
 
-    canvas_height = int(600 * size_multiplier)
-    canvas_width = int(1200 * size_multiplier)
-    log("Canvas: {}x{}".format(canvas_width, canvas_height))
+    # ===== PHASE 1: Get state (either from JSON or generate) =====
+    json_state = load_state_from_json(STATE_JSON_PATH)
 
+    if json_state is not None:
+        canvas_width = json_state['width']
+        canvas_height = json_state['height']
+        drawable_blocks, lines = state_from_json(json_state)
+        log("Using JSON state: {}x{}, seed={}, {} blocks, {} lines".format(
+            canvas_width, canvas_height, json_state.get('seed'),
+            len(drawable_blocks), len(lines)))
+    else:
+        canvas_height = int(600 * size_multiplier)
+        canvas_width = int(1200 * size_multiplier)
+        drawable_blocks, lines = generate_state(seed, canvas_width, canvas_height)
+        log("Generated state: {}x{}, {} blocks, {} lines".format(
+            canvas_width, canvas_height, len(drawable_blocks), len(lines)))
+
+    # ===== PHASE 2: Render =====
     image = Gimp.Image.new(canvas_width, canvas_height, Gimp.ImageBaseType.RGB)
     log("Image created: {}".format(image))
-
     Gimp.progress_init("Generating Mondrian...")
 
     try:
         # Create background layer
-        log("Creating background layer...")
         bg_layer = Gimp.Layer.new(image, "Background",
                                   canvas_width, canvas_height,
                                   Gimp.ImageType.RGB_IMAGE, 100.0,
@@ -630,17 +747,6 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
         image.insert_layer(bg_layer, None, 0)
         set_foreground_rgb(*BACKGROUND_COLOR)
         bg_layer.fill(Gimp.FillType.FOREGROUND)
-        log("Background filled")
-
-        # Quadtree subdivision
-        blocks = []
-        potential_lines = []
-        half_height = canvas_height
-        subdivide(0, 0, half_height, half_height, blocks, potential_lines)
-        if canvas_width > half_height:
-            subdivide(half_height, 0, min(half_height, canvas_width - half_height),
-                      half_height, blocks, potential_lines)
-        log("Subdivision complete: {} blocks".format(len(blocks)))
 
         # Create blocks layer
         blocks_layer = Gimp.Layer.new(image, "Mondrian Blocks",
@@ -650,39 +756,22 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
         image.insert_layer(blocks_layer, None, 0)
         blocks_layer.fill(Gimp.FillType.TRANSPARENT)
 
-        # Draw blocks
-        for i, block in enumerate(blocks):
-            rect_center_x = block['x'] + block['w'] / 2.0
-            rect_center_y = block['y'] + block['h'] / 2.0
-            painterliness = max(0, 1 - calc_edgeness(rect_center_x, rect_center_y, canvas_width, canvas_height))
-            color_key = sample_color(math.sqrt(painterliness))
-
-            if color_key == 'white':
-                continue
-
-            base_color = pick(COLORS[color_key])
-
-            # Check if block touches outer border
-            touches_border = (block['x'] <= 0 or block['y'] <= 0 or
-                              block['x'] + block['w'] >= canvas_width or
-                              block['y'] + block['h'] >= canvas_height)
-
-            if touches_border:
+        # Draw blocks (single unified loop)
+        for i, block in enumerate(drawable_blocks):
+            if block['touchesBorder']:
                 # Standard solid fill for border blocks
-                set_foreground_rgb(*base_color)
+                set_foreground_rgb(*block['color'])
                 image.select_rectangle(Gimp.ChannelOps.REPLACE,
                                        int(block['x']), int(block['y']),
                                        int(block['w']), int(block['h']))
                 blocks_layer.edit_fill(Gimp.FillType.FOREGROUND)
                 Gimp.Selection.none(image)
             else:
-                # Watercolor fill using Tyler Hobbs algorithm
-                # Jitter position (±1*painterliness) and size (±2*painterliness) like gen2.html
-                # This keeps the shape rectangular rather than jittering corners independently
-                jittered_x = block['x'] + random.uniform(-1, 1) * painterliness
-                jittered_y = block['y'] + random.uniform(-1, 1) * painterliness
-                jittered_w = block['w'] + random.uniform(-2, 2) * painterliness
-                jittered_h = block['h'] + random.uniform(-2, 2) * painterliness
+                # Watercolor fill
+                jittered_x = block['x'] + block['jitterX']
+                jittered_y = block['y'] + block['jitterY']
+                jittered_w = block['w'] + block['jitterW']
+                jittered_h = block['h'] + block['jitterH']
                 vertices = [
                     {'x': jittered_x, 'y': jittered_y},
                     {'x': jittered_x + jittered_w, 'y': jittered_y},
@@ -690,34 +779,27 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
                     {'x': jittered_x, 'y': jittered_y + jittered_h}
                 ]
 
-                # Parameters from gen2.html:
-                # brush.bleed(painterliness * 0.5, "out");
-                # brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
-                # brush.fill(baseColor, 150);
+                painterliness = block['painterliness']
                 bleed_strength = pow(painterliness, 1) * 0.5
                 texture_strength = painterliness * 0.8
                 border_strength = painterliness * 0.25
                 opacity = 150
 
                 wc_layer = draw_watercolor_fill(
-                    image, blocks_layer, vertices, base_color,
+                    image, blocks_layer, vertices, block['color'],
                     bleed_strength, texture_strength, border_strength, opacity
                 )
 
                 if wc_layer:
-                    # Merge down to blocks layer
                     blocks_layer = image.merge_down(wc_layer, Gimp.MergeType.EXPAND_AS_NECESSARY)
 
-            # Re-init progress after merge operations (merge_down resets it)
-            progress = float(i + 1) / len(blocks) * 0.9
-            Gimp.progress_init("Generating Mondrian... ({}/{} blocks)".format(i + 1, len(blocks)))
+            # Progress update
+            progress = float(i + 1) / len(drawable_blocks) * 0.9
+            Gimp.progress_init("Generating Mondrian... ({}/{} blocks)".format(i + 1, len(drawable_blocks)))
             Gimp.progress_update(progress)
 
         Gimp.Selection.none(image)
-
-        # Select lines
-        lines = select_lines(potential_lines, canvas_width, canvas_height)
-        log("Selected {} lines".format(len(lines)))
+        log("Drawing {} lines".format(len(lines)))
 
         # Create lines layer
         lines_layer = Gimp.Layer.new(image, "Mondrian Lines",
