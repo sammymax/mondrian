@@ -91,13 +91,18 @@ def dist(x1, y1, x2, y2):
 # =============================================================================
 
 def rotate_point(cx, cy, x, y, angle_deg):
-    """Rotate point (x,y) around (cx,cy) by angle in degrees."""
+    """Rotate point (x,y) around (cx,cy) by angle in degrees.
+
+    Matches p5.brush Q() function which uses clockwise rotation:
+    x' = cos(θ)*(x-cx) + sin(θ)*(y-cy) + cx
+    y' = cos(θ)*(y-cy) - sin(θ)*(x-cx) + cy
+    """
     angle_rad = math.radians(angle_deg)
     cos_a = math.cos(angle_rad)
     sin_a = math.sin(angle_rad)
-    # Standard 2D rotation: (x*cos - y*sin, x*sin + y*cos)
-    nx = cos_a * (x - cx) - sin_a * (y - cy) + cx
-    ny = sin_a * (x - cx) + cos_a * (y - cy) + cy
+    # p5.brush uses clockwise rotation (opposite of standard CCW)
+    nx = cos_a * (x - cx) + sin_a * (y - cy) + cx
+    ny = cos_a * (y - cy) - sin_a * (x - cx) + cy
     return (nx, ny)
 
 
@@ -164,8 +169,10 @@ class WatercolorPolygon:
             to_center_dx = self.midP['x'] - v1['x']
             to_center_dy = self.midP['y'] - v1['y']
             cross = edge_dx * to_center_dy - edge_dy * to_center_dx
-            # If cross > 0, center is on left of edge (outward is right, dir=True)
-            self.dir.append(cross > 0)
+            # In Y-down coordinates: cross > 0 means center is CW from edge direction
+            # For "outward" bleed, we need to push CCW from edge, which requires dir=False
+            # (dir=False -> use +90° rotation -> CCW perpendicular -> outward)
+            self.dir.append(cross < 0)
 
     def grow(self, growth_factor=1.0, degrow=False):
         """
