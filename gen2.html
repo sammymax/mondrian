@@ -36,7 +36,13 @@
 <body>
   <h1>Procedural Mondrian</h1>
   <div id="canvas-container"></div>
-  <!--<div id="canvas-container2"></div>-->
+  <h2 style="color: #888; font-size: 0.9rem; margin-top: 20px;">Tiled Rendering Test</h2>
+  <div style="display: grid; grid-template-columns: 1200px 1200px; width: 2400px; border: 2px solid #555; line-height: 0;">
+    <div id="tile-0"></div>
+    <div id="tile-1"></div>
+    <div id="tile-2"></div>
+    <div id="tile-3"></div>
+  </div>
   <div class="controls">
     <button onclick="download()">Download PNG</button>
   </div>
@@ -57,11 +63,17 @@
     debugLog(`Initial seed: ${initialSeed}`);
     if (dpi) debugLog(`DPI scale: ${dpi}`);
 
-    function createMondrian(containerId, seed) {
+    // viewport: { x, y, w, h } - the slice to render. If null, renders the full canvas.
+    const FULL_WIDTH = 2400;
+    const FULL_HEIGHT = 1200;
+
+    function createMondrian(containerId, seed, viewport = null) {
+      const vp = viewport || { x: 0, y: 0, w: FULL_WIDTH, h: FULL_HEIGHT };
+
       return new p5((p) => {
 
     let swirlShader;
-    
+
     const swirlVert = `
       attribute vec3 aPosition;
       attribute vec2 aTexCoord;
@@ -186,9 +198,10 @@
     `;
     
     p.setup = function() {
-      debugLog('Setup started for ' + containerId);
+      debugLog('Setup started for ' + containerId + ' viewport: ' + JSON.stringify(vp));
       if (dpi) p.pixelDensity(dpi);
-      let canvas = p.createCanvas(2400, 1200, p.WEBGL);
+      // Canvas size is the viewport size
+      let canvas = p.createCanvas(vp.w, vp.h, p.WEBGL);
       canvas.parent(containerId);
 
       // Create shader
@@ -214,10 +227,15 @@
       debugLog('RNGs seeded');
 
       // Reset transformations and offset for WEBGL coordinates
+      // Translate so (0,0) is at top-left, offset by viewport position
       p.resetMatrix();
-      p.translate(-p.width/2, -p.height/2);
-      
-      // Background
+      p.translate(-vp.w/2 - vp.x, -vp.h/2 - vp.y);
+
+      // For manual coordinate offsets if needed
+      const ox = 0;
+      const oy = 0;
+
+      // Background - fill the full area (will be clipped to viewport)
       p.background('#f8f5ef');
       debugLog('Background drawn');
       
@@ -251,7 +269,7 @@
           prob = (minSide - 20) / (200 - 20);
         }
         
-        if (p.random() < prob) {
+        if (2 * p.random() < prob) {
           // Divide into 4 quadrants
           const midX = x + w / 2;
           const midY = y + h / 2;
@@ -270,15 +288,16 @@
         }
       }
       
-      // Start with two squares side by side
-      subdivide(0, 0, p.height, p.height);
-      subdivide(p.height, 0, p.height, p.height);
+      // Start with two squares side by side (use FULL dimensions for consistent layout)
+      subdivide(0, 0, FULL_HEIGHT, FULL_HEIGHT);
+      subdivide(FULL_HEIGHT, 0, FULL_HEIGHT, FULL_HEIGHT);
       debugLog(`Quadtree subdivision complete: ${blocks.length} blocks, ${potentialLines.length} potential lines`);
       
       // ===== HELPER: CALCULATE EDGENESS =====
       // Returns 0 at center, 1 at edges (using ray projection)
-      const canvasCenterX = p.width / 2;
-      const canvasCenterY = p.height / 2;
+      // Use FULL dimensions for consistent layout across tiles
+      const canvasCenterX = FULL_WIDTH / 2;
+      const canvasCenterY = FULL_HEIGHT / 2;
       
       function calcEdgeness(x, y) {
         const dx = x - canvasCenterX;
@@ -384,15 +403,15 @@
         
         const baseColor = pick(colors[colorKey]);
         
-        // Check if block touches outer border
-        const touchesBorder = b.x <= 0 || b.y <= 0 || b.x + b.w >= p.width || b.y + b.h >= p.height;
+        // Check if block touches outer border (use FULL dimensions)
+        const touchesBorder = b.x <= 0 || b.y <= 0 || b.x + b.w >= FULL_WIDTH || b.y + b.h >= FULL_HEIGHT;
 
         if (touchesBorder) {
           // Standard solid fill for border blocks
           p.push();
           p.noStroke();
           p.fill(baseColor);
-          p.rect(b.x, b.y, b.w, b.h);
+          p.rect(b.x - ox, b.y - oy, b.w, b.h);
           p.pop();
         } else {
           // Single watercolor layer with params scaled by painterliness
@@ -400,8 +419,8 @@
           brush.bleed(Math.pow(painterliness, 1) * 0.5, "out");
           brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
           brush.rect(
-            b.x + p.random(-1, 1) * painterliness,
-            b.y + p.random(-1, 1) * painterliness,
+            b.x - ox + p.random(-1, 1) * painterliness,
+            b.y - oy + p.random(-1, 1) * painterliness,
             b.w + p.random(-2, 2) * painterliness,
             b.h + p.random(-2, 2) * painterliness
           );
@@ -445,14 +464,14 @@
       for (const l of lines) {
         // Main stroke
         brush.set('oilpaint', '#000000', l.t);
-        brush.line(l.x1, l.y1, l.x2, l.y2);
+        brush.line(l.x1 - ox, l.y1 - oy, l.x2 - ox, l.y2 - oy);
         // Second pass slightly offset for paint buildup
         brush.set('oilpaint', '#0a0a0a', l.t * 0.7);
         brush.line(
-          l.x1 + p.random(-0.3, 0.3),
-          l.y1 + p.random(-0.3, 0.3),
-          l.x2 + p.random(-0.3, 0.3),
-          l.y2 + p.random(-0.3, 0.3)
+          l.x1 - ox + p.random(-0.3, 0.3),
+          l.y1 - oy + p.random(-0.3, 0.3),
+          l.x2 - ox + p.random(-0.3, 0.3),
+          l.y2 - oy + p.random(-0.3, 0.3)
         );
       }
       
@@ -460,35 +479,36 @@
       brush.reDraw();
       debugLog('reDraw complete');
 
-      // ===== APPLY SWIRL SHADER =====
+      // ===== APPLY SWIRL SHADER (currently disabled) =====
+      // When shader is re-enabled, this section applies post-processing
+      /*
       debugLog('Applying swirl shader...');
-
-      // Copy current canvas to a graphics buffer
-      let pg = p.createGraphics(p.width, p.height, p.WEBGL);
-      pg.image(p.get(), -p.width/2, -p.height/2);
-
-      // Apply shader
+      let pg = p.createGraphics(vp.w, vp.h, p.WEBGL);
+      pg.image(p.get(), -vp.w/2, -vp.h/2);
       p.shader(swirlShader);
       swirlShader.setUniform('uTexture', pg);
-      swirlShader.setUniform('uSwirlStrength', 1.2);  // Adjust strength as desired
-      swirlShader.setUniform('uNoiseStrength', 0.125);  // Displacement amount (in UV space)
-      swirlShader.setUniform('uNoiseScale', 8.0);  // Noise frequency
-
-      // Draw fullscreen quad with shader
+      swirlShader.setUniform('uSwirlStrength', 1.2);
+      swirlShader.setUniform('uNoiseStrength', 0.125);
+      swirlShader.setUniform('uNoiseScale', 8.0);
       p.noStroke();
-      p.rect(-p.width/2, -p.height/2, p.width, p.height);
-
-      // Reset shader for future draws
+      p.rect(-vp.w/2, -vp.h/2, vp.w, vp.h);
       p.resetShader();
       pg.remove();
-
       debugLog('Swirl shader applied');
+      */
     }
 
     }); // end p5 instance
     } // end createMondrian
 
+    // Full render (no viewport - renders entire 2400x1200)
     createMondrian('canvas-container', initialSeed);
+
+    // Tiled renders - 2x2 grid of 1200x600 tiles
+    createMondrian('tile-0', initialSeed, { x: 0, y: 0, w: 1200, h: 600 });
+    createMondrian('tile-1', initialSeed, { x: 1200, y: 0, w: 1200, h: 600 });
+    createMondrian('tile-2', initialSeed, { x: 0, y: 600, w: 1200, h: 600 });
+    createMondrian('tile-3', initialSeed, { x: 1200, y: 600, w: 1200, h: 600 });
 
     function download() {
       // Download from first canvas
