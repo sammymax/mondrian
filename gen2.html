@@ -64,11 +64,23 @@
     if (dpi) debugLog(`DPI scale: ${dpi}`);
 
     // viewport: { x, y, w, h } - the slice to render. If null, renders the full canvas.
+    // padding: extra pixels to render around viewport for bleed effects, then crop
     const FULL_WIDTH = 2400;
     const FULL_HEIGHT = 1200;
 
-    function createMondrian(containerId, seed, viewport = null) {
+    function createMondrian(containerId, seed, viewport = null, padding = 0) {
       const vp = viewport || { x: 0, y: 0, w: FULL_WIDTH, h: FULL_HEIGHT };
+
+      // Calculate padded render region (clamped to full canvas bounds)
+      const render = {
+        x: Math.max(0, vp.x - padding),
+        y: Math.max(0, vp.y - padding),
+        w: Math.min(FULL_WIDTH, vp.x + vp.w + padding) - Math.max(0, vp.x - padding),
+        h: Math.min(FULL_HEIGHT, vp.y + vp.h + padding) - Math.max(0, vp.y - padding)
+      };
+      // Crop offset: where in the rendered image does the actual viewport start
+      const cropX = vp.x - render.x;
+      const cropY = vp.y - render.y;
 
       return new p5((p) => {
 
@@ -198,10 +210,10 @@
     `;
     
     p.setup = function() {
-      debugLog('Setup started for ' + containerId + ' viewport: ' + JSON.stringify(vp));
+      debugLog('Setup started for ' + containerId + ' viewport: ' + JSON.stringify(vp) + ' render: ' + JSON.stringify(render));
       if (dpi) p.pixelDensity(dpi);
-      // Canvas size is the viewport size
-      let canvas = p.createCanvas(vp.w, vp.h, p.WEBGL);
+      // Canvas size is the padded render size (we'll crop after)
+      let canvas = p.createCanvas(render.w, render.h, p.WEBGL);
       canvas.parent(containerId);
 
       // Create shader
@@ -227,9 +239,9 @@
       debugLog('RNGs seeded');
 
       // Reset transformations and offset for WEBGL coordinates
-      // Translate so (0,0) is at top-left, offset by viewport position
+      // Translate so (0,0) is at top-left, offset by render region position
       p.resetMatrix();
-      p.translate(-vp.w/2 - vp.x, -vp.h/2 - vp.y);
+      p.translate(-render.w/2 - render.x, -render.h/2 - render.y);
 
       // For manual coordinate offsets if needed
       const ox = 0;
@@ -479,6 +491,21 @@
       brush.reDraw();
       debugLog('reDraw complete');
 
+      // ===== CROP TO ACTUAL VIEWPORT (if padding was used) =====
+      if (padding > 0 && (cropX > 0 || cropY > 0 || render.w > vp.w || render.h > vp.h)) {
+        debugLog(`Cropping from render ${render.w}x${render.h} to viewport ${vp.w}x${vp.h} at offset (${cropX}, ${cropY})`);
+        // Get the cropped region
+        let cropped = p.get(cropX, cropY, vp.w, vp.h);
+        // Resize canvas to viewport size
+        p.resizeCanvas(vp.w, vp.h);
+        // Reset matrix for clean draw
+        p.resetMatrix();
+        p.translate(-vp.w/2, -vp.h/2);
+        // Draw cropped image
+        p.image(cropped, 0, 0);
+        debugLog('Crop complete');
+      }
+
       // ===== APPLY SWIRL SHADER (currently disabled) =====
       // When shader is re-enabled, this section applies post-processing
       /*
@@ -501,14 +528,16 @@
     }); // end p5 instance
     } // end createMondrian
 
+    // Tiled renders - 2x2 grid of 1200x600 tiles
+    // Use padding to avoid edge blending artifacts (padding is rendered then cropped)
+    const TILE_PADDING = 0;
+    createMondrian('tile-0', initialSeed, { x: 0, y: 0, w: 1200, h: 600 }, TILE_PADDING);
+    createMondrian('tile-1', initialSeed, { x: 1200, y: 0, w: 1200, h: 600 }, TILE_PADDING);
+    createMondrian('tile-2', initialSeed, { x: 0, y: 600, w: 1200, h: 600 }, TILE_PADDING);
+    createMondrian('tile-3', initialSeed, { x: 1200, y: 600, w: 1200, h: 600 }, TILE_PADDING);
+
     // Full render (no viewport - renders entire 2400x1200)
     createMondrian('canvas-container', initialSeed);
-
-    // Tiled renders - 2x2 grid of 1200x600 tiles
-    createMondrian('tile-0', initialSeed, { x: 0, y: 0, w: 1200, h: 600 });
-    createMondrian('tile-1', initialSeed, { x: 1200, y: 0, w: 1200, h: 600 });
-    createMondrian('tile-2', initialSeed, { x: 0, y: 600, w: 1200, h: 600 });
-    createMondrian('tile-3', initialSeed, { x: 1200, y: 600, w: 1200, h: 600 });
 
     function download() {
       // Download from first canvas
