@@ -50,6 +50,12 @@
       console.log('MAX_TEXTURE_SIZE:', gl.getParameter(gl.MAX_TEXTURE_SIZE));
 
       debugLog('Creating 8000x8000 WEBGL canvas...');
+
+      // Log default WebGL context attributes
+      let testCanvas = document.createElement('canvas');
+      let testCtx = testCanvas.getContext('webgl');
+      console.log('Default WebGL attributes:', testCtx.getContextAttributes());
+
       let canvas = createCanvas(1000 * scale, 1000 * scale, WEBGL);
       canvas.parent('canvas-container');
 
