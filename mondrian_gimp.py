@@ -737,12 +737,12 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
         canvas_height = int(600 * size_multiplier)
         canvas_width = int(1200 * size_multiplier)
         drawable_blocks, lines = generate_state(seed, canvas_width, canvas_height)
-        log("Generated state: {}x{}, {} blocks, {} lines".format(
-            canvas_width, canvas_height, len(drawable_blocks), len(lines)))
+        log(f"Generated state: {canvas_width}x{canvas_height},"
+            f"{len(drawable_blocks)} blocks, {len(lines)} lines")
 
     # ===== PHASE 2: Render =====
     image = Gimp.Image.new(canvas_width, canvas_height, Gimp.ImageBaseType.RGB)
-    log("Image created: {}".format(image))
+    log(f"Image created: {image}")
     Gimp.progress_init("Generating Mondrian...")
 
     try:
@@ -765,6 +765,7 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
 
         # Draw blocks (single unified loop)
         for i, block in enumerate(drawable_blocks):
+            log(f"Block {i+1}/{len(drawable_blocks)}")
             if block['touchesBorder']:
                 # Standard solid fill for border blocks
                 set_foreground_rgb(*block['color'])
@@ -806,7 +807,7 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
             Gimp.progress_update(progress)
 
         Gimp.Selection.none(image)
-        log("Drawing {} lines".format(len(lines)))
+        log(f"Drawing {len(lines)} lines")
 
         # Create lines layer
         lines_layer = Gimp.Layer.new(image, "Mondrian Lines",
@@ -871,7 +872,7 @@ def run(procedure, config, data):
         seed = config.get_property("seed")
         line_thickness = config.get_property("line-thickness")
         size_multiplier = config.get_property("size-multiplier")
-        log("seed={}, thickness={}, size={}".format(seed, line_thickness, size_multiplier))
+        log(f"seed={seed}, thickness={line_thickness}, size={size_multiplier}")
 
         result = generate_mondrian(procedure, seed, line_thickness, size_multiplier)
         log("generate_mondrian completed")
