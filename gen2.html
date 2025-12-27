@@ -36,6 +36,7 @@
 <body>
   <h1>Procedural Mondrian</h1>
   <div id="canvas-container"></div>
+  <!--<div id="canvas-container2"></div>-->
   <div class="controls">
     <button onclick="download()">Download PNG</button>
   </div>
@@ -48,14 +49,17 @@
     function debugLog(msg) {
       console.log(`[${new Date().toISOString()}] ${msg}`);
     }
-    
+
     // Get seed from URL or generate one
     const urlParams = new URLSearchParams(window.location.search);
     const initialSeed = urlParams.get('seed') ? parseInt(urlParams.get('seed')) : Date.now();
     const dpi = urlParams.get('dpi') ? parseFloat(urlParams.get('dpi')) : null;
     debugLog(`Initial seed: ${initialSeed}`);
     if (dpi) debugLog(`DPI scale: ${dpi}`);
-    
+
+    function createMondrian(containerId, seed) {
+      return new p5((p) => {
+
     let swirlShader;
     
     const swirlVert = `
@@ -181,36 +185,40 @@
       }
     `;
     
-    function setup() {
-      debugLog('Setup started');
-      if (dpi) pixelDensity(dpi);
-      let canvas = createCanvas(2400, 1200, WEBGL);
-      canvas.parent('canvas-container');
-      
+    p.setup = function() {
+      debugLog('Setup started for ' + containerId);
+      if (dpi) p.pixelDensity(dpi);
+      let canvas = p.createCanvas(2400, 1200, p.WEBGL);
+      canvas.parent(containerId);
+
       // Create shader
-      swirlShader = createShader(swirlVert, swirlFrag);
-      
+      swirlShader = p.createShader(swirlVert, swirlFrag);
+
+      brush.instance(p);
+      p.randomSeed(seed);  // Seed p5's random before load
+      p.noiseSeed(seed);   // And noise
+      brush.seed(seed);
       brush.load();
-      noLoop();
+      p.noLoop();
       debugLog('Setup complete');
-      generate(initialSeed);
-    }
+      generate(seed);
+    };
     
     function generate(seed) {
       debugLog(`Generation started with seed: ${seed}`);
       document.getElementById('seed').textContent = 'Seed: ' + seed;
       // Seed RNGs
       brush.seed(seed);
-      randomSeed(seed);
-      noiseSeed(seed);
+      p.randomSeed(seed);
+      p.noiseSeed(seed);
       debugLog('RNGs seeded');
-      
+
       // Reset transformations and offset for WEBGL coordinates
-      resetMatrix();
-      translate(-width/2, -height/2);
+      p.resetMatrix();
+      p.translate(-p.width/2, -p.height/2);
       
       // Background
-      background('#f8f5ef');
+      p.background('#f8f5ef');
       debugLog('Background drawn');
       
       const colors = {
@@ -224,7 +232,7 @@
         orange: ['#ff6d00', '#ff9100', '#ff5500'],
       };
       
-      const pick = arr => arr[Math.floor(random() * arr.length)];
+      const pick = arr => arr[Math.floor(p.random() * arr.length)];
       
       // ===== QUADTREE SUBDIVISION =====
       const blocks = [];
@@ -243,7 +251,7 @@
           prob = (minSide - 20) / (200 - 20);
         }
         
-        if (random() < prob) {
+        if (p.random() < prob) {
           // Divide into 4 quadrants
           const midX = x + w / 2;
           const midY = y + h / 2;
@@ -263,14 +271,14 @@
       }
       
       // Start with two squares side by side
-      subdivide(0, 0, height, height);
-      subdivide(height, 0, height, height);
+      subdivide(0, 0, p.height, p.height);
+      subdivide(p.height, 0, p.height, p.height);
       debugLog(`Quadtree subdivision complete: ${blocks.length} blocks, ${potentialLines.length} potential lines`);
       
       // ===== HELPER: CALCULATE EDGENESS =====
       // Returns 0 at center, 1 at edges (using ray projection)
-      const canvasCenterX = width / 2;
-      const canvasCenterY = height / 2;
+      const canvasCenterX = p.width / 2;
+      const canvasCenterY = p.height / 2;
       
       function calcEdgeness(x, y) {
         const dx = x - canvasCenterX;
@@ -291,16 +299,16 @@
         
         // Probability: higher at edges (5% at center, 95% at edges, quadratic)
         const prob = 0.05 + edgeness * edgeness * 0.9;
-        
-        if (random() < prob) {
+
+        if (p.random() < prob) {
           // Line painterliness (inverse of edgeness): 0 at edges, 1 at center
           const linePainterliness = 1 - edgeness;
-          
+
           // Randomly shorten the line - more shortening toward center
           const shortenProb = linePainterliness * 0.5;  // 0% at edges, 50% at center
           const shortenAmt = linePainterliness * 0.4;   // 0% at edges, up to 40% at center
-          const shortenStart = random() < shortenProb ? random() * shortenAmt : 0;
-          const shortenEnd = random() < shortenProb ? random() * shortenAmt : 0;
+          const shortenStart = p.random() < shortenProb ? p.random() * shortenAmt : 0;
+          const shortenEnd = p.random() < shortenProb ? p.random() * shortenAmt : 0;
           
           const dx = pl.x2 - pl.x1;
           const dy = pl.y2 - pl.y1;
@@ -310,7 +318,7 @@
             y1: pl.y1 + dy * shortenStart,
             x2: pl.x2 - dx * shortenEnd,
             y2: pl.y2 - dy * shortenEnd,
-            t: 0.6 + random() * 0.4 + linePainterliness * random() * 0.4  // more thickness variation toward center
+            t: 0.6 + p.random() * 0.4 + linePainterliness * p.random() * 0.4  // more thickness variation toward center
           });
         }
       }
@@ -339,7 +347,7 @@
         }
         
         // Sample
-        let r = random() * total;
+        let r = p.random() * total;
         for (const col of Object.keys(props)) {
           r -= props[col];
           if (r <= 0) return col;
@@ -351,6 +359,7 @@
       
       // ===== DRAW BLOCKS =====
       // Watercolor params scaled by distance from center
+      brush.seed(seed);  // Re-seed before drawing to ensure consistent state
       brush.noStroke();
       brush.noHatch();
       debugLog(`Starting to draw ${blocks.length} blocks...`);
@@ -376,25 +385,25 @@
         const baseColor = pick(colors[colorKey]);
         
         // Check if block touches outer border
-        const touchesBorder = b.x <= 0 || b.y <= 0 || b.x + b.w >= width || b.y + b.h >= height;
-        
+        const touchesBorder = b.x <= 0 || b.y <= 0 || b.x + b.w >= p.width || b.y + b.h >= p.height;
+
         if (touchesBorder) {
           // Standard solid fill for border blocks
-          push();
-          noStroke();
-          fill(baseColor);
-          rect(b.x, b.y, b.w, b.h);
-          pop();
+          p.push();
+          p.noStroke();
+          p.fill(baseColor);
+          p.rect(b.x, b.y, b.w, b.h);
+          p.pop();
         } else {
           // Single watercolor layer with params scaled by painterliness
           brush.fill(baseColor, 150);
           brush.bleed(Math.pow(painterliness, 1) * 0.5, "out");
           brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
           brush.rect(
-            b.x + random(-1, 1) * painterliness,
-            b.y + random(-1, 1) * painterliness,
-            b.w + random(-2, 2) * painterliness,
-            b.h + random(-2, 2) * painterliness
+            b.x + p.random(-1, 1) * painterliness,
+            b.y + p.random(-1, 1) * painterliness,
+            b.w + p.random(-2, 2) * painterliness,
+            b.h + p.random(-2, 2) * painterliness
           );
         }
       }
@@ -406,6 +415,7 @@
       
       // ===== DRAW LINES =====
       // Add custom oil paint brush with bristle texture and pressure variation
+      brush.seed(seed);  // Re-seed before lines
       debugLog('Setting up line brush...');
       brush.add("oilpaint", {
         type: "custom",
@@ -439,10 +449,10 @@
         // Second pass slightly offset for paint buildup
         brush.set('oilpaint', '#0a0a0a', l.t * 0.7);
         brush.line(
-          l.x1 + random(-0.3, 0.3), 
-          l.y1 + random(-0.3, 0.3), 
-          l.x2 + random(-0.3, 0.3), 
-          l.y2 + random(-0.3, 0.3)
+          l.x1 + p.random(-0.3, 0.3),
+          l.y1 + p.random(-0.3, 0.3),
+          l.x2 + p.random(-0.3, 0.3),
+          l.y2 + p.random(-0.3, 0.3)
         );
       }
       
@@ -454,29 +464,39 @@
       debugLog('Applying swirl shader...');
 
       // Copy current canvas to a graphics buffer
-      let pg = createGraphics(width, height, WEBGL);
-      pg.image(get(), -width/2, -height/2);
+      let pg = p.createGraphics(p.width, p.height, p.WEBGL);
+      pg.image(p.get(), -p.width/2, -p.height/2);
 
       // Apply shader
-      shader(swirlShader);
+      p.shader(swirlShader);
       swirlShader.setUniform('uTexture', pg);
       swirlShader.setUniform('uSwirlStrength', 1.2);  // Adjust strength as desired
       swirlShader.setUniform('uNoiseStrength', 0.125);  // Displacement amount (in UV space)
       swirlShader.setUniform('uNoiseScale', 8.0);  // Noise frequency
 
       // Draw fullscreen quad with shader
-      noStroke();
-      rect(-width/2, -height/2, width, height);
+      p.noStroke();
+      p.rect(-p.width/2, -p.height/2, p.width, p.height);
 
       // Reset shader for future draws
-      resetShader();
+      p.resetShader();
       pg.remove();
 
       debugLog('Swirl shader applied');
     }
 
+    }); // end p5 instance
+    } // end createMondrian
+
+    createMondrian('canvas-container', initialSeed);
+
     function download() {
-      saveCanvas('mondrian-' + initialSeed, 'png');
+      // Download from first canvas
+      let canvas = document.querySelector('#canvas-container canvas');
+      let link = document.createElement('a');
+      link.download = 'mondrian-' + initialSeed + '.png';
+      link.href = canvas.toDataURL();
+      link.click();
     }
   </script>
 </body>
