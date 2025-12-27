@@ -354,7 +354,11 @@
         }
       }
       debugLog(`Lines selected: ${lines.length} lines`);
-      
+
+      // ===== CAPTURE STATE FOR EXPORT =====
+      // We need to pre-compute all random decisions for blocks so Python can replicate exactly
+      const exportBlocks = [];
+
       // Color proportions at painterliness 0 and 1
       const colorPropsAt0 = {
         white: 10, red: 3, yellow: 3, blue: 3, black: 2, lightBlue: 2, green: 0, orange: 0
@@ -403,20 +407,37 @@
         // Calculate center of this rectangle
         const rectCenterX = b.x + b.w / 2;
         const rectCenterY = b.y + b.h / 2;
-        
+
         // Painterliness: 1 at center, 0 at edges
         const painterliness = Math.max(0, 1 - calcEdgeness(rectCenterX, rectCenterY));
-        
+
         // Sample color based on painterliness (sqrt to shift distribution)
         const colorKey = sampleColor(Math.sqrt(painterliness));
-        
+
         // Skip white blocks
         if (colorKey === 'white') continue;
-        
+
         const baseColor = pick(colors[colorKey]);
-        
+
         // Check if block touches outer border (use FULL dimensions)
         const touchesBorder = b.x <= 0 || b.y <= 0 || b.x + b.w >= FULL_WIDTH || b.y + b.h >= FULL_HEIGHT;
+
+        // Pre-compute jitter values for export
+        const jitterX = p.random(-1, 1) * painterliness;
+        const jitterY = p.random(-1, 1) * painterliness;
+        const jitterW = p.random(-2, 2) * painterliness;
+        const jitterH = p.random(-2, 2) * painterliness;
+
+        // Capture for export
+        exportBlocks.push({
+          x: b.x, y: b.y, w: b.w, h: b.h,
+          colorKey: colorKey,
+          color: baseColor,
+          painterliness: painterliness,
+          touchesBorder: touchesBorder,
+          jitterX: jitterX, jitterY: jitterY,
+          jitterW: jitterW, jitterH: jitterH
+        });
 
         if (touchesBorder) {
           // Standard solid fill for border blocks
@@ -431,10 +452,10 @@
           brush.bleed(Math.pow(painterliness, 1) * 0.5, "out");
           brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
           brush.rect(
-            b.x - ox + p.random(-1, 1) * painterliness,
-            b.y - oy + p.random(-1, 1) * painterliness,
-            b.w + p.random(-2, 2) * painterliness,
-            b.h + p.random(-2, 2) * painterliness
+            b.x - ox + jitterX,
+            b.y - oy + jitterY,
+            b.w + jitterW,
+            b.h + jitterH
           );
         }
       }
@@ -491,6 +512,22 @@
       brush.reDraw();
       debugLog('reDraw complete');
 
+      // ===== EXPORT STATE AS JSON =====
+      // Only export for the main (non-tiled) render
+      if (!viewport) {
+        const exportState = {
+          seed: seed,
+          width: FULL_WIDTH,
+          height: FULL_HEIGHT,
+          blocks: exportBlocks,
+          lines: lines
+        };
+        console.log('=== MONDRIAN_STATE_JSON_START ===');
+        console.log(JSON.stringify(exportState, null, 2));
+        console.log('=== MONDRIAN_STATE_JSON_END ===');
+        debugLog(`Exported state: ${exportBlocks.length} blocks, ${lines.length} lines`);
+      }
+
       // ===== CROP TO ACTUAL VIEWPORT (if padding was used) =====
       if (padding > 0 && (cropX > 0 || cropY > 0 || render.w > vp.w || render.h > vp.h)) {
         debugLog(`Cropping from render ${render.w}x${render.h} to viewport ${vp.w}x${vp.h} at offset (${cropX}, ${cropY})`);
@@ -528,16 +565,19 @@
     }); // end p5 instance
     } // end createMondrian
 
+    // Full render FIRST (no viewport - renders entire 2400x1200)
+    // This must be first to initialize p5.brush with full canvas dimensions.
+    // The brush library's FF.create() and scaleBrushes() only run once, using
+    // the first canvas's dimensions (see p5-brush.index.js:136-141).
+    createMondrian('canvas-container', initialSeed);
+
     // Tiled renders - 2x2 grid of 1200x600 tiles
-    // Use padding to avoid edge blending artifacts (padding is rendered then cropped)
+    // These use the flow field and brush scaling from the full render above.
     const TILE_PADDING = 0;
     createMondrian('tile-0', initialSeed, { x: 0, y: 0, w: 1200, h: 600 }, TILE_PADDING);
     createMondrian('tile-1', initialSeed, { x: 1200, y: 0, w: 1200, h: 600 }, TILE_PADDING);
     createMondrian('tile-2', initialSeed, { x: 0, y: 600, w: 1200, h: 600 }, TILE_PADDING);
     createMondrian('tile-3', initialSeed, { x: 1200, y: 600, w: 1200, h: 600 }, TILE_PADDING);
-
-    // Full render (no viewport - renders entire 2400x1200)
-    createMondrian('canvas-container', initialSeed);
 
     function download() {
       // Download from first canvas
