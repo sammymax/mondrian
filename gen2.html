@@ -243,10 +243,6 @@
       p.resetMatrix();
       p.translate(-render.w/2 - render.x, -render.h/2 - render.y);
 
-      // For manual coordinate offsets if needed
-      const ox = 0;
-      const oy = 0;
-
       // Background - fill the full area (will be clipped to viewport)
       p.background('#f8f5ef');
       debugLog('Background drawn');
@@ -444,7 +440,7 @@
           p.push();
           p.noStroke();
           p.fill(baseColor);
-          p.rect(b.x - ox, b.y - oy, b.w, b.h);
+          p.rect(b.x, b.y, b.w, b.h);
           p.pop();
         } else {
           // Single watercolor layer with params scaled by painterliness
@@ -452,8 +448,8 @@
           brush.bleed(Math.pow(painterliness, 1) * 0.5, "out");
           brush.fillTexture(painterliness * 0.8, painterliness * 0.25);
           brush.rect(
-            b.x - ox + jitterX,
-            b.y - oy + jitterY,
+            b.x + jitterX,
+            b.y + jitterY,
             b.w + jitterW,
             b.h + jitterH
           );
@@ -497,14 +493,14 @@
       for (const l of lines) {
         // Main stroke
         brush.set('oilpaint', '#000000', l.t);
-        brush.line(l.x1 - ox, l.y1 - oy, l.x2 - ox, l.y2 - oy);
+        brush.line(l.x1, l.y1, l.x2, l.y2);
         // Second pass slightly offset for paint buildup
         brush.set('oilpaint', '#0a0a0a', l.t * 0.7);
         brush.line(
-          l.x1 - ox + p.random(-0.3, 0.3),
-          l.y1 - oy + p.random(-0.3, 0.3),
-          l.x2 - ox + p.random(-0.3, 0.3),
-          l.y2 - oy + p.random(-0.3, 0.3)
+          l.x1 + p.random(-0.3, 0.3),
+          l.y1 + p.random(-0.3, 0.3),
+          l.x2 + p.random(-0.3, 0.3),
+          l.y2 + p.random(-0.3, 0.3)
         );
       }
       
