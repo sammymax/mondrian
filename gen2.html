@@ -16,7 +16,7 @@
       font-family: system-ui, sans-serif;
     }
     h1 { color: white; font-weight: 300; letter-spacing: 0.1em; font-size: 1.2rem; }
-    #canvas-container { border: 1px solid #333; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+    #canvas-container { border: 2px solid #555; box-shadow: 0 10px 40px rgba(0,0,0,0.5); line-height: 0; }
     .controls { display: flex; gap: 12px; }
     button {
       padding: 10px 24px;
@@ -37,7 +37,7 @@
   <h1>Procedural Mondrian</h1>
   <div id="canvas-container"></div>
   <h2 style="color: #888; font-size: 0.9rem; margin-top: 20px;">Tiled Rendering Test</h2>
-  <div style="display: grid; grid-template-columns: 1200px 1200px; width: 2400px; border: 2px solid #555; line-height: 0;">
+  <div style="display: grid; grid-template-columns: 1200px 1200px; border: 2px solid #555; line-height: 0;">
     <div id="tile-0"></div>
     <div id="tile-1"></div>
     <div id="tile-2"></div>
@@ -565,19 +565,31 @@
     }); // end p5 instance
     } // end createMondrian
 
-    // Full render FIRST (no viewport - renders entire 2400x1200)
-    // This must be first to initialize p5.brush with full canvas dimensions.
+    // Render queue - full canvas first, then tiles
+    // Full render must be first to initialize p5.brush with full canvas dimensions.
     // The brush library's FF.create() and scaleBrushes() only run once, using
     // the first canvas's dimensions (see p5-brush.index.js:136-141).
-    createMondrian('canvas-container', initialSeed);
-
-    // Tiled renders - 2x2 grid of 1200x600 tiles
-    // These use the flow field and brush scaling from the full render above.
+    // Using setTimeout(0) between renders allows browser to paint each canvas
+    // as it completes rather than waiting for all to finish.
     const TILE_PADDING = 0;
-    createMondrian('tile-0', initialSeed, { x: 0, y: 0, w: 1200, h: 600 }, TILE_PADDING);
-    createMondrian('tile-1', initialSeed, { x: 1200, y: 0, w: 1200, h: 600 }, TILE_PADDING);
-    createMondrian('tile-2', initialSeed, { x: 0, y: 600, w: 1200, h: 600 }, TILE_PADDING);
-    createMondrian('tile-3', initialSeed, { x: 1200, y: 600, w: 1200, h: 600 }, TILE_PADDING);
+    const renderQueue = [
+      { id: 'canvas-container', vp: null },  // Full render (no viewport)
+      { id: 'tile-0', vp: { x: 0, y: 0, w: 1200, h: 600 } },
+      { id: 'tile-1', vp: { x: 1200, y: 0, w: 1200, h: 600 } },
+      { id: 'tile-2', vp: { x: 0, y: 600, w: 1200, h: 600 } },
+      { id: 'tile-3', vp: { x: 1200, y: 600, w: 1200, h: 600 } },
+    ];
+
+    function renderSequentially(index = 0) {
+      if (index >= renderQueue.length) return;
+      const item = renderQueue[index];
+      createMondrian(item.id, initialSeed, item.vp, TILE_PADDING);
+      // setTimeout(0) yields to browser for paint, then continues
+      setTimeout(() => renderSequentially(index + 1), 0);
+    }
+
+    // Start rendering
+    setTimeout(() => renderSequentially(), 0);
 
     function download() {
       // Download from first canvas
