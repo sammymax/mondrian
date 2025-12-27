@@ -98,7 +98,7 @@ def subdivide(x, y, w, h, blocks, potential_lines):
     else:
         prob = (min_side - 20) / (200.0 - 20.0)
 
-    if random.random() < prob:
+    if 2 * random.random() < prob:
         # Integer division for clean splits
         half_w = w // 2
         half_h = h // 2
@@ -169,6 +169,9 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
     image = Gimp.Image.new(canvas_width, canvas_height, Gimp.ImageBaseType.RGB)
     log("Image created: {}".format(image))
 
+    # Initialize progress bar
+    Gimp.progress_init("Generating Mondrian...")
+
     try:
         # Create blocks layer
         log("Creating blocks layer...")
@@ -229,34 +232,76 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
                 image.select_rectangle(Gimp.ChannelOps.REPLACE, x, y, w, h)
                 blocks_layer.edit_fill(Gimp.FillType.FOREGROUND)
             else:
-                # Clear any active selection before drawing strokes
+                # Watercolor-style fill matching p5.brush approach:
+                # - Rounded corners approaching ellipse at painterliness=1
+                # - Edge bleeding outward via gaussian blur
+                # - Texture via noise
+
+                # Create a temporary layer for this block's watercolor effect
+                block_layer = Gimp.Layer.new(image, "block_temp",
+                                             canvas_width, canvas_height,
+                                             Gimp.ImageType.RGBA_IMAGE, 100.0,
+                                             Gimp.LayerMode.NORMAL)
+                image.insert_layer(block_layer, None, 0)
+                block_layer.fill(Gimp.FillType.TRANSPARENT)
+
+                # Calculate corner radius: 0 at painterliness=0, min(w,h)/2 at painterliness=1
+                # This makes the shape transition from rectangle to stadium/ellipse
+                min_dim = min(w, h)
+                corner_radius = painterliness * min_dim / 2.0
+
+                # Blur radius for soft edges (scales with painterliness and size)
+                # Larger blur = softer edges
+                blur_radius = painterliness * min_dim * 0.08
+
+                # To bleed OUTWARD, we fill an EXPANDED shape, then blur
+                # The blur "eats into" the shape, so expansion compensates
+                # Expand by blur_radius so after blur, we still cover original bounds
+                expand = blur_radius * 1.5  # slightly more than blur to ensure coverage
+
+                fill_x = x - expand
+                fill_y = y - expand
+                fill_w = w + expand * 2
+                fill_h = h + expand * 2
+                fill_corner = corner_radius + expand  # corners expand too
+
+                # Fill expanded rounded rectangle with base color
+                set_foreground_rgb(*base_color)
+                image.select_round_rectangle(
+                    Gimp.ChannelOps.REPLACE,
+                    fill_x, fill_y, fill_w, fill_h,
+                    fill_corner, fill_corner
+                )
+                block_layer.edit_fill(Gimp.FillType.FOREGROUND)
                 Gimp.Selection.none(image)
 
-                # Painterly fill using brush strokes
-                brush = Gimp.Brush.get_by_name("Acrylic 01")
-                Gimp.context_set_brush(brush)
-                set_foreground_rgb(*base_color)
+                # Apply Gaussian blur for soft bleeding edges
+                if blur_radius > 0.5:
+                    blur_filter = Gimp.DrawableFilter.new(block_layer, "gegl:gaussian-blur", "")
+                    blur_config = blur_filter.get_config()
+                    blur_config.set_property("std-dev-x", blur_radius)
+                    blur_config.set_property("std-dev-y", blur_radius)
+                    block_layer.merge_filter(blur_filter)
 
-                # Bigger painterliness = fatter stroke but less coverage
-                base_stroke_size = 30
-                stroke_size = base_stroke_size + painterliness * 50
-                Gimp.context_set_brush_size(stroke_size)
+                # Add noise for texture (like brush.fillTexture)
+                if painterliness > 0.1:
+                    noise_pct = painterliness * 0.8 * 15
+                    noise_filter = Gimp.DrawableFilter.new(block_layer, "gegl:noise-hsv", "")
+                    noise_config = noise_filter.get_config()
+                    noise_config.set_property("holdness", 2)
+                    noise_config.set_property("hue-distance", 0.0)
+                    noise_config.set_property("saturation-distance", noise_pct * 0.3)
+                    noise_config.set_property("value-distance", noise_pct * 0.5)
+                    block_layer.merge_filter(noise_filter)
 
-                # Fewer strokes for higher painterliness
-                min_strokes = 2
-                max_strokes = max(8, int(min(w, h) / 20))
-                num_strokes = int(max_strokes - (max_strokes - min_strokes) * painterliness)
+                # Layer opacity: semi-transparent for watercolor effect
+                block_opacity = 75 - painterliness * 20  # 75% at edges, 55% at center
+                block_layer.set_opacity(block_opacity)
 
-                # Draw horizontal strokes across the rectangle
-                for s in range(num_strokes):
-                    t = (s + 0.5) / num_strokes
-                    stroke_y = y + t * h
-                    stroke_y += (random.random() - 0.5) * stroke_size * 0.3
+                # Merge down to blocks layer and update reference
+                blocks_layer = image.merge_down(block_layer, Gimp.MergeType.EXPAND_AS_NECESSARY)
 
-                    strokes = [x, stroke_y, x + w, stroke_y]
-                    Gimp.pencil(blocks_layer, strokes)
-
-            Gimp.progress_update(float(i) / len(blocks) * 0.5)
+            Gimp.progress_update(float(i) / len(blocks) * 0.9)
 
         Gimp.Selection.none(image)
 
@@ -286,9 +331,10 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
             strokes = [line['x1'], line['y1'], line['x2'], line['y2']]
             Gimp.pencil(lines_layer, strokes)
 
-            Gimp.progress_update(0.5 + float(i) / max(len(lines), 1) * 0.5)
+            Gimp.progress_update(0.9 + float(i) / max(len(lines), 1) * 0.1)
 
         # Display the new image
+        Gimp.progress_end()
         display = Gimp.Display.new(image)
         Gimp.displays_flush()
         log("Image displayed")
