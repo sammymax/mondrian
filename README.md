@@ -1,3 +1,3 @@
-View at `sammymax.github.io/mondrian/gen2.html`
+View at [sammymax.github.io/mondrian/gen2.html](sammymax.github.io/mondrian/gen2.html)
 
-Uses `https://github.com/sammymax/p5.brush`
+Uses [https://github.com/sammymax/p5.brush](https://github.com/sammymax/p5.brush)
