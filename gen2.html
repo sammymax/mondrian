@@ -59,9 +59,8 @@
     // Get seed from URL or generate one
     const urlParams = new URLSearchParams(window.location.search);
     const initialSeed = urlParams.get('seed') ? parseInt(urlParams.get('seed')) : Date.now();
-    const dpi = urlParams.get('dpi') ? parseFloat(urlParams.get('dpi')) : null;
-    debugLog(`Initial seed: ${initialSeed}`);
-    if (dpi) debugLog(`DPI scale: ${dpi}`);
+    const complexity = urlParams.get('complexity') ? parseFloat(urlParams.get('complexity')) : 1.0;
+    debugLog(`Initial seed=${initialSeed}; complexity=${complexity}`);
 
     // viewport: { x, y, w, h } - the slice to render. If null, renders the full canvas.
     // padding: extra pixels to render around viewport for bleed effects, then crop
@@ -211,7 +210,7 @@
     
     p.setup = function() {
       debugLog('Setup started for ' + containerId + ' viewport: ' + JSON.stringify(vp) + ' render: ' + JSON.stringify(render));
-      if (dpi) p.pixelDensity(dpi);
+      p.pixelDensity(1);
       // Canvas size is the padded render size (we'll crop after)
       let canvas = p.createCanvas(render.w, render.h, p.WEBGL);
       canvas.parent(containerId);
@@ -277,7 +276,7 @@
           prob = (minSide - 20) / (200 - 20);
         }
         
-        if (1 * p.random() < prob) {
+        if (complexity * p.random() < prob) {
           // Divide into 4 quadrants
           const midX = x + w / 2;
           const midY = y + h / 2;
