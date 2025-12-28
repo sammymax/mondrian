@@ -46,10 +46,10 @@
   <div id="canvas-container"></div>
   <h2 style="color: #888; font-size: 0.9rem; margin-top: 20px;">Tiled Rendering Test</h2>
   <div style="display: grid; grid-template-columns: 1200px 1200px; border: 2px solid #555; line-height: 0;">
-    <div id="tile-0"></div>
-    <div id="tile-1"></div>
-    <div id="tile-2"></div>
-    <div id="tile-3"></div>
+    <div id="tile-00"></div>
+    <div id="tile-01"></div>
+    <div id="tile-10"></div>
+    <div id="tile-11"></div>
   </div>
   <div class="controls">
     <button onclick="download()">Download PNG</button>
@@ -574,10 +574,10 @@
     // as it completes rather than waiting for all to finish.
     const renderQueue = [
       { id: 'canvas-container', vp: null },  // Full render (no viewport)
-      { id: 'tile-0', vp: { x: 0, y: 0, zoom: 2 } },
-      { id: 'tile-1', vp: { x: 1200, y: 0, zoom: 2 } },
-      { id: 'tile-2', vp: { x: 0, y: 600, zoom: 2} },
-      { id: 'tile-3', vp: { x: 1200, y: 600, zoom: 2 } },
+      { id: 'tile-00', vp: { x: 0, y: 0, zoom: 2 } },
+      { id: 'tile-01', vp: { x: 1200, y: 0, zoom: 2 } },
+      { id: 'tile-10', vp: { x: 0, y: 600, zoom: 2} },
+      { id: 'tile-11', vp: { x: 1200, y: 600, zoom: 2 } },
     ];
 
     function renderSequentially(index = 0) {
@@ -585,10 +585,12 @@
         tiledResultCanvas.width = FULL_WIDTH * 2;
         tiledResultCanvas.height = FULL_HEIGHT * 2;
         const resCtx = tiledResultCanvas.getContext('2d');
-        for (let i = 0; i < 4; i++) {
-          const p5Canvas = document.querySelector(`#tile-${i} canvas`);
-          resCtx.drawImage(p5Canvas, 0, 0, FULL_WIDTH, FULL_HEIGHT,
-            FULL_WIDTH * (i % 2), FULL_HEIGHT * (i >= 2), FULL_WIDTH, FULL_HEIGHT);
+        for (let i = 0; i < 2; i++) {
+          for (let j = 0; j < 2; j++) {
+            const p5Canvas = document.querySelector(`#tile-${i}${j} canvas`);
+            resCtx.drawImage(p5Canvas, 0, 0, FULL_WIDTH, FULL_HEIGHT,
+              FULL_WIDTH * j, FULL_HEIGHT * i, FULL_WIDTH, FULL_HEIGHT);
+          }
         }
         return;
       }
