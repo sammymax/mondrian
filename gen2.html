@@ -75,19 +75,18 @@
     debugLog(`Initial seed=${initialSeed}; complexity=${complexity}`);
 
     // viewport: { x, y, w, h } - the slice to render. If null, renders the full canvas.
-    // padding: extra pixels to render around viewport for bleed effects, then crop
     const FULL_WIDTH = 2400;
     const FULL_HEIGHT = 1200;
 
-    function createMondrian(containerId, seed, viewport = null, padding = 0, cb = null) {
+    function createMondrian(containerId, seed, viewport = null, cb = null) {
       const vp = viewport || { x: 0, y: 0, w: FULL_WIDTH, h: FULL_HEIGHT };
 
       // Calculate padded render region (clamped to full canvas bounds)
       const render = {
-        x: Math.max(0, vp.x - padding),
-        y: Math.max(0, vp.y - padding),
-        w: Math.min(FULL_WIDTH, vp.x + vp.w + padding) - Math.max(0, vp.x - padding),
-        h: Math.min(FULL_HEIGHT, vp.y + vp.h + padding) - Math.max(0, vp.y - padding)
+        x: Math.max(0, vp.x),
+        y: Math.max(0, vp.y),
+        w: Math.min(FULL_WIDTH, vp.x + vp.w) - Math.max(0, vp.x),
+        h: Math.min(FULL_HEIGHT, vp.y + vp.h) - Math.max(0, vp.y)
       };
       // Crop offset: where in the rendered image does the actual viewport start
       const cropX = vp.x - render.x;
@@ -539,21 +538,6 @@
         debugLog(`Exported state: ${exportBlocks.length} blocks, ${lines.length} lines`);
       }
 
-      // ===== CROP TO ACTUAL VIEWPORT (if padding was used) =====
-      if (padding > 0 && (cropX > 0 || cropY > 0 || render.w > vp.w || render.h > vp.h)) {
-        debugLog(`Cropping from render ${render.w}x${render.h} to viewport ${vp.w}x${vp.h} at offset (${cropX}, ${cropY})`);
-        // Get the cropped region
-        let cropped = p.get(cropX, cropY, vp.w, vp.h);
-        // Resize canvas to viewport size
-        p.resizeCanvas(vp.w, vp.h);
-        // Reset matrix for clean draw
-        p.resetMatrix();
-        p.translate(-vp.w/2, -vp.h/2);
-        // Draw cropped image
-        p.image(cropped, 0, 0);
-        debugLog('Crop complete');
-      }
-
       // ===== APPLY SWIRL SHADER (currently disabled) =====
       // When shader is re-enabled, this section applies post-processing
       /*
@@ -584,7 +568,6 @@
     // the first canvas's dimensions (see p5-brush.index.js:136-141).
     // Using setTimeout(0) between renders allows browser to paint each canvas
     // as it completes rather than waiting for all to finish.
-    const TILE_PADDING = 0;
     const renderQueue = [
       { id: 'canvas-container', vp: null },  // Full render (no viewport)
       { id: 'tile-0', vp: { x: 0, y: 0, w: 1200, h: 600 } },
@@ -596,7 +579,7 @@
     function renderSequentially(index = 0) {
       if (index >= renderQueue.length) return;
       const item = renderQueue[index];
-      createMondrian(item.id, initialSeed, item.vp, TILE_PADDING,
+      createMondrian(item.id, initialSeed, item.vp,
         () => renderSequentially(index + 1)
       );
     }
