@@ -412,10 +412,16 @@ def draw_polygon_layer(image, wc_layer, polygon, alpha, has_stroke, stroke_alpha
     Exactly matches p5.brush FillPolygon.layer() method.
 
     Key: In p5.brush, all polygons are drawn to the SAME buffer with alpha blending.
-    Canvas alpha compositing: out_α = src_α + dst_α × (1 - src_α)
+    Canvas alpha compositing (Porter-Duff "source over"):
+        out_color = src_color * src_α + dst_color * dst_α * (1 - src_α)
+        out_α = src_α + dst_α * (1 - src_α)
 
-    We replicate this by drawing directly to wc_layer using GIMP's paint opacity,
-    NOT by creating separate layers with layer opacity.
+    GIMP's edit_fill with paint opacity does NOT accumulate alpha correctly -
+    it tends to replace rather than blend. To get proper compositing, we:
+    1. Create a temporary layer
+    2. Fill the polygon at 100% opacity on that layer
+    3. Set the layer opacity to desired alpha
+    4. Merge down - GIMP's layer merge uses correct Porter-Duff compositing
     """
     if len(polygon.v) < 3:
         return wc_layer
@@ -427,23 +433,34 @@ def draw_polygon_layer(image, wc_layer, polygon, alpha, has_stroke, stroke_alpha
 
     coords = polygon_to_array(polygon.v)
 
-    # Set the paint opacity (this affects how the fill blends with existing content)
-    # In GIMP, opacity is 0-100, not 0-255
-    paint_opacity = (alpha / 255.0) * 100.0
-    Gimp.context_set_opacity(paint_opacity)
+    # Convert alpha from 0-255 to 0-100 for GIMP layer opacity
+    layer_opacity = (alpha / 255.0) * 100.0
 
-    # Set foreground color
+    # Find the position of wc_layer to insert temp layer above it
+    layers = image.get_layers()
+    wc_position = 0
+    for idx, lyr in enumerate(layers):
+        if lyr == wc_layer:
+            wc_position = idx
+            break
+
+    # Create a temporary layer for this polygon fill
+    temp_layer = Gimp.Layer.new(image, "poly_temp",
+                                image.get_width(), image.get_height(),
+                                Gimp.ImageType.RGBA_IMAGE, layer_opacity,
+                                Gimp.LayerMode.NORMAL)
+    image.insert_layer(temp_layer, None, wc_position)
+    temp_layer.fill(Gimp.FillType.TRANSPARENT)
+
+    # Fill the polygon at 100% opacity on temp layer
+    Gimp.context_set_opacity(100.0)
     set_foreground_rgb(*color_rgb)
-
-    # Select and fill the polygon directly on wc_layer
-    # With paint opacity set, this will blend with existing content just like p5.js canvas
     image.select_polygon(Gimp.ChannelOps.REPLACE, coords)
-    wc_layer.edit_fill(Gimp.FillType.FOREGROUND)
-
+    temp_layer.edit_fill(Gimp.FillType.FOREGROUND)
     Gimp.Selection.none(image)
 
-    # Reset opacity to full for other operations
-    Gimp.context_set_opacity(100.0)
+    # Merge down - this uses proper Porter-Duff compositing
+    wc_layer = image.merge_down(temp_layer, Gimp.MergeType.EXPAND_AS_NECESSARY)
 
     return wc_layer
 
@@ -755,27 +772,39 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
         set_foreground_rgb(*BACKGROUND_COLOR)
         bg_layer.fill(Gimp.FillType.FOREGROUND)
 
-        # Create blocks layer
-        blocks_layer = Gimp.Layer.new(image, "Mondrian Blocks",
-                                      canvas_width, canvas_height,
-                                      Gimp.ImageType.RGBA_IMAGE, 100.0,
-                                      Gimp.LayerMode.NORMAL)
-        image.insert_layer(blocks_layer, None, 0)
-        blocks_layer.fill(Gimp.FillType.TRANSPARENT)
+        # Two-pass rendering to match p5.brush behavior:
+        # 1. Solid blocks layer (bottom) - border blocks drawn directly
+        # 2. Watercolor layer (top) - all watercolor bleed composites ON TOP
+        # This ensures watercolor bleed is always visible over solid blocks,
+        # regardless of block order (matching browser behavior)
 
-        # Draw blocks (single unified loop)
+        solid_layer = Gimp.Layer.new(image, "Solid Blocks",
+                                     canvas_width, canvas_height,
+                                     Gimp.ImageType.RGBA_IMAGE, 100.0,
+                                     Gimp.LayerMode.NORMAL)
+        image.insert_layer(solid_layer, None, 0)
+        solid_layer.fill(Gimp.FillType.TRANSPARENT)
+
+        watercolor_layer = Gimp.Layer.new(image, "Watercolor Blocks",
+                                          canvas_width, canvas_height,
+                                          Gimp.ImageType.RGBA_IMAGE, 100.0,
+                                          Gimp.LayerMode.NORMAL)
+        image.insert_layer(watercolor_layer, None, 0)  # On top of solid
+        watercolor_layer.fill(Gimp.FillType.TRANSPARENT)
+
+        # Draw blocks - solid to solid_layer, watercolor to watercolor_layer
         for i, block in enumerate(drawable_blocks):
             log(f"Block {i+1}/{len(drawable_blocks)}")
             if block['touchesBorder']:
-                # Standard solid fill for border blocks
+                # Standard solid fill for border blocks - draw to solid_layer
                 set_foreground_rgb(*block['color'])
                 image.select_rectangle(Gimp.ChannelOps.REPLACE,
                                        int(block['x']), int(block['y']),
                                        int(block['w']), int(block['h']))
-                blocks_layer.edit_fill(Gimp.FillType.FOREGROUND)
+                solid_layer.edit_fill(Gimp.FillType.FOREGROUND)
                 Gimp.Selection.none(image)
             else:
-                # Watercolor fill
+                # Watercolor fill - draw to watercolor_layer
                 jittered_x = block['x'] + block['jitterX']
                 jittered_y = block['y'] + block['jitterY']
                 jittered_w = block['w'] + block['jitterW']
@@ -794,12 +823,12 @@ def generate_mondrian(procedure, seed, line_thickness, size_multiplier):
                 opacity = 150
 
                 wc_layer = draw_watercolor_fill(
-                    image, blocks_layer, vertices, block['color'],
+                    image, watercolor_layer, vertices, block['color'],
                     bleed_strength, texture_strength, border_strength, opacity
                 )
 
                 if wc_layer:
-                    blocks_layer = image.merge_down(wc_layer, Gimp.MergeType.EXPAND_AS_NECESSARY)
+                    watercolor_layer = image.merge_down(wc_layer, Gimp.MergeType.EXPAND_AS_NECESSARY)
 
             # Progress update
             progress = float(i + 1) / len(drawable_blocks) * 0.9
