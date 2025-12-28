@@ -79,7 +79,9 @@
     const FULL_HEIGHT = 1200;
 
     function createMondrian(containerId, seed, viewport = null, cb = null) {
-      const vp = viewport || { x: 0, y: 0, w: FULL_WIDTH, h: FULL_HEIGHT };
+      const vp = viewport || { x: 0, y: 0, zoom: 1 };
+      vp.w = Math.floor(FULL_WIDTH / vp.zoom);
+      vp.h = Math.floor(FULL_HEIGHT / vp.zoom);
 
       // Calculate padded render region (clamped to full canvas bounds)
       const render = {
@@ -221,7 +223,7 @@
     
     p.setup = function() {
       debugLog('Setup started for ' + containerId + ' viewport: ' + JSON.stringify(vp) + ' render: ' + JSON.stringify(render));
-      p.pixelDensity(1);
+      p.pixelDensity(vp.zoom);
       // Canvas size is the padded render size (we'll crop after)
       let canvas = p.createCanvas(render.w, render.h, p.WEBGL);
       canvas.parent(containerId);
@@ -570,10 +572,10 @@
     // as it completes rather than waiting for all to finish.
     const renderQueue = [
       { id: 'canvas-container', vp: null },  // Full render (no viewport)
-      { id: 'tile-0', vp: { x: 0, y: 0, w: 1200, h: 600 } },
-      { id: 'tile-1', vp: { x: 1200, y: 0, w: 1200, h: 600 } },
-      { id: 'tile-2', vp: { x: 0, y: 600, w: 1200, h: 600 } },
-      { id: 'tile-3', vp: { x: 1200, y: 600, w: 1200, h: 600 } },
+      { id: 'tile-0', vp: { x: 0, y: 0, zoom: 2 } },
+      { id: 'tile-1', vp: { x: 1200, y: 0, zoom: 2 } },
+      { id: 'tile-2', vp: { x: 0, y: 600, zoom: 2} },
+      { id: 'tile-3', vp: { x: 1200, y: 600, zoom: 2 } },
     ];
 
     function renderSequentially(index = 0) {
