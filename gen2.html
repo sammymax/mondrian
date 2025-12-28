@@ -79,7 +79,7 @@
     const FULL_WIDTH = 2400;
     const FULL_HEIGHT = 1200;
 
-    function createMondrian(containerId, seed, viewport = null, padding = 0) {
+    function createMondrian(containerId, seed, viewport = null, padding = 0, cb = null) {
       const vp = viewport || { x: 0, y: 0, w: FULL_WIDTH, h: FULL_HEIGHT };
 
       // Calculate padded render region (clamped to full canvas bounds)
@@ -406,11 +406,10 @@
       brush.noHatch();
       debugLog(`Starting to draw ${blocks.length} blocks...`);
 
-      for (let i = 0; i < blocks.length; i++) {
+      function renderBlock(i, cb) {
+        if (i >= blocks.length) return cb();
         const b = blocks[i];
-        if (i % 10 === 0) {
-          debugLog(`Drawing block ${i + 1}/${blocks.length}`);
-        }
+
         // Calculate center of this rectangle
         const rectCenterX = b.x + b.w / 2;
         const rectCenterY = b.y + b.h / 2;
@@ -422,7 +421,7 @@
         const colorKey = sampleColor(Math.sqrt(painterliness));
 
         // Skip white blocks
-        if (colorKey === 'white') continue;
+        if (colorKey === 'white') return setTimeout(() => renderBlock(i + 1, cb));
 
         const baseColor = pick(colors[colorKey]);
 
@@ -466,8 +465,9 @@
           );
         }
         setProgress(0.95 * (i + 1) / blocks.length);
+        setTimeout(() => renderBlock(i + 1, cb));
       }
-      
+      renderBlock(0, () => {
       // Force blend layers
       debugLog('Blocks drawn, starting reBlend...');
       brush.reBlend();
@@ -571,6 +571,8 @@
       pg.remove();
       debugLog('Swirl shader applied');
       */
+      if (cb !== null) cb();
+      });
     }
 
     }); // end p5 instance
@@ -594,9 +596,9 @@
     function renderSequentially(index = 0) {
       if (index >= renderQueue.length) return;
       const item = renderQueue[index];
-      createMondrian(item.id, initialSeed, item.vp, TILE_PADDING);
-      // setTimeout(0) yields to browser for paint, then continues
-      setTimeout(() => renderSequentially(index + 1), 5);
+      createMondrian(item.id, initialSeed, item.vp, TILE_PADDING,
+        () => renderSequentially(index + 1)
+      );
     }
 
     // Start rendering
