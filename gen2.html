@@ -65,6 +65,10 @@
       console.log(`[${new Date().toISOString()}] ${msg}`);
     }
 
+    function nextFrame() {
+      return new Promise(resolve => requestAnimationFrame(resolve));
+    }
+
     function setProgress(amt) {
       document.getElementById('progress').style.width = `${amt * 2400}px`;
     }
@@ -80,7 +84,7 @@
     const FULL_HEIGHT = 1200;
     const tiledResultCanvas = document.createElement('canvas');
 
-    function createMondrian(containerId, seed, viewport = null, cb = null) {
+    async function createMondrian(containerId, seed, viewport = null) {
       const vp = viewport || { x: 0, y: 0, zoom: 1 };
       vp.w = Math.floor(FULL_WIDTH / vp.zoom);
       vp.h = Math.floor(FULL_HEIGHT / vp.zoom);
@@ -96,7 +100,7 @@
       const cropX = vp.x - render.x;
       const cropY = vp.y - render.y;
 
-      return new p5((p) => {
+      return new Promise((resolve) => { new p5((p) => {
 
     let swirlShader;
 
@@ -243,7 +247,7 @@
       generate(seed);
     };
     
-    function generate(seed) {
+    async function generate(seed) {
       debugLog(`Generation started with seed: ${seed}`);
       document.getElementById('seed').textContent = 'Seed: ' + seed;
       // Seed RNGs
@@ -409,10 +413,8 @@
       brush.noHatch();
       debugLog(`Starting to draw ${blocks.length} blocks...`);
 
-      function renderBlock(i, cb) {
-        if (i >= blocks.length) return cb();
+      async function renderBlock(i) {
         const b = blocks[i];
-
         // Calculate center of this rectangle
         const rectCenterX = b.x + b.w / 2;
         const rectCenterY = b.y + b.h / 2;
@@ -424,7 +426,7 @@
         const colorKey = sampleColor(Math.sqrt(painterliness));
 
         // Skip white blocks
-        if (colorKey === 'white') return setTimeout(() => renderBlock(i + 1, cb));
+        if (colorKey === 'white') return;
 
         const baseColor = pick(colors[colorKey]);
 
@@ -468,9 +470,10 @@
           );
         }
         setProgress(0.95 * (i + 1) / blocks.length);
-        setTimeout(() => renderBlock(i + 1, cb));
+        await nextFrame();
       }
-      renderBlock(0, () => {
+      for (let i = 0; i < blocks.length; i++) await renderBlock(i);
+
       // Force blend layers
       debugLog('Blocks drawn, starting reBlend...');
       brush.reBlend();
@@ -505,7 +508,7 @@
       debugLog('Line brush created, drawing lines...');
       
       // Draw black lines with multiple passes for richness
-      for (let i = 0; i < lines.length; i++) {
+      async function renderLine(i) {
         const l = lines[i];
         // Main stroke
         brush.set('oilpaint', '#000000', l.t);
@@ -519,7 +522,9 @@
           l.y2 + p.random(-0.3, 0.3)
         );
         setProgress(0.95 + 0.05 * (i + 1) / lines.length);
+        await nextFrame();
       }
+      for (let i = 0; i < lines.length; i++) await renderLine(i);
       setProgress(1);
       
       debugLog('Lines drawn, starting reDraw...');
@@ -559,19 +564,16 @@
       pg.remove();
       debugLog('Swirl shader applied');
       */
-      if (cb !== null) cb();
-      });
+      resolve();
     }
 
-    }); // end p5 instance
+    }); }); // end p5 instance, end Promise
     } // end createMondrian
 
     // Render queue - full canvas first, then tiles
     // Full render must be first to initialize p5.brush with full canvas dimensions.
     // The brush library's FF.create() and scaleBrushes() only run once, using
     // the first canvas's dimensions (see p5-brush.index.js:136-141).
-    // Using setTimeout(0) between renders allows browser to paint each canvas
-    // as it completes rather than waiting for all to finish.
     const renderQueue = [
       { id: 'canvas-container', vp: null },  // Full render (no viewport)
       { id: 'tile-00', vp: { x: 0, y: 0, zoom: 2 } },
@@ -580,28 +582,23 @@
       { id: 'tile-11', vp: { x: 1200, y: 600, zoom: 2 } },
     ];
 
-    function renderSequentially(index = 0) {
-      if (index >= renderQueue.length) {
-        tiledResultCanvas.width = FULL_WIDTH * 2;
-        tiledResultCanvas.height = FULL_HEIGHT * 2;
-        const resCtx = tiledResultCanvas.getContext('2d');
-        for (let i = 0; i < 2; i++) {
-          for (let j = 0; j < 2; j++) {
-            const p5Canvas = document.querySelector(`#tile-${i}${j} canvas`);
-            resCtx.drawImage(p5Canvas, 0, 0, FULL_WIDTH, FULL_HEIGHT,
-              FULL_WIDTH * j, FULL_HEIGHT * i, FULL_WIDTH, FULL_HEIGHT);
-          }
-        }
-        return;
+    async function renderAll() {
+      for (let index = 0; index < renderQueue.length; index++) {
+        const item = renderQueue[index];
+        await createMondrian(item.id, initialSeed, item.vp);
       }
-      const item = renderQueue[index];
-      createMondrian(item.id, initialSeed, item.vp,
-        () => renderSequentially(index + 1)
-      );
+      tiledResultCanvas.width = FULL_WIDTH * 2;
+      tiledResultCanvas.height = FULL_HEIGHT * 2;
+      const resCtx = tiledResultCanvas.getContext('2d');
+      for (let i = 0; i < 2; i++) {
+        for (let j = 0; j < 2; j++) {
+          const p5Canvas = document.querySelector(`#tile-${i}${j} canvas`);
+          resCtx.drawImage(p5Canvas, 0, 0, FULL_WIDTH, FULL_HEIGHT,
+            FULL_WIDTH * j, FULL_HEIGHT * i, FULL_WIDTH, FULL_HEIGHT);
+        }
+      }
     }
-
-    // Start rendering
-    setTimeout(() => renderSequentially(), 0);
+    renderAll();
 
     function download() {
       // Download from first canvas
