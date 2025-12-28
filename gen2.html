@@ -48,8 +48,6 @@
   <div style="display: grid; grid-template-columns: 1200px 1200px; border: 2px solid #555; line-height: 0;">
     <div id="tile-00"></div>
     <div id="tile-01"></div>
-    <div id="tile-10"></div>
-    <div id="tile-11"></div>
   </div>
   <div class="controls">
     <button onclick="download()">Download PNG</button>
@@ -88,6 +86,7 @@
       const vp = viewport || { x: 0, y: 0, zoom: 1 };
       vp.w = Math.floor(FULL_WIDTH / vp.zoom);
       vp.h = Math.floor(FULL_HEIGHT / vp.zoom);
+      if (vp.zoom > 1) vp.h *= 2;  // Tiled rendering uses squares.
 
       // Calculate padded render region (clamped to full canvas bounds)
       const render = {
@@ -578,8 +577,6 @@
       { id: 'canvas-container', vp: null },  // Full render (no viewport)
       { id: 'tile-00', vp: { x: 0, y: 0, zoom: 2 } },
       { id: 'tile-01', vp: { x: 1200, y: 0, zoom: 2 } },
-      { id: 'tile-10', vp: { x: 0, y: 600, zoom: 2} },
-      { id: 'tile-11', vp: { x: 1200, y: 600, zoom: 2 } },
     ];
 
     async function renderAll() {
@@ -590,11 +587,11 @@
       tiledResultCanvas.width = FULL_WIDTH * 2;
       tiledResultCanvas.height = FULL_HEIGHT * 2;
       const resCtx = tiledResultCanvas.getContext('2d');
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < 1; i++) {
         for (let j = 0; j < 2; j++) {
           const p5Canvas = document.querySelector(`#tile-${i}${j} canvas`);
-          resCtx.drawImage(p5Canvas, 0, 0, FULL_WIDTH, FULL_HEIGHT,
-            FULL_WIDTH * j, FULL_HEIGHT * i, FULL_WIDTH, FULL_HEIGHT);
+          resCtx.drawImage(p5Canvas, 0, 0, FULL_WIDTH, FULL_WIDTH,
+            FULL_WIDTH * j, FULL_WIDTH * i, FULL_WIDTH, FULL_WIDTH);
         }
       }
     }
