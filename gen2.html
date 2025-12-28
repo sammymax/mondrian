@@ -590,7 +590,7 @@
       // Download from first canvas
       let canvas = document.querySelector('#canvas-container canvas');
       let link = document.createElement('a');
-      link.download = 'mondrian-' + initialSeed + '.png';
+      link.download = `mondrian-${initialSeed}-${complexity}.png`;
       link.href = canvas.toDataURL();
       link.click();
     }
