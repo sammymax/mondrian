@@ -581,7 +581,7 @@
       const item = renderQueue[index];
       createMondrian(item.id, initialSeed, item.vp, TILE_PADDING);
       // setTimeout(0) yields to browser for paint, then continues
-      setTimeout(() => renderSequentially(index + 1), 0);
+      setTimeout(() => renderSequentially(index + 1), 5);
     }
 
     // Start rendering
