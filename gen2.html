@@ -53,6 +53,7 @@
   </div>
   <div class="controls">
     <button onclick="download()">Download PNG</button>
+    <button onclick="downloadBig()">Download BIG PNG</button>
   </div>
   <div id="seed"></div>
 
@@ -77,6 +78,7 @@
     // viewport: { x, y, w, h } - the slice to render. If null, renders the full canvas.
     const FULL_WIDTH = 2400;
     const FULL_HEIGHT = 1200;
+    const tiledResultCanvas = document.createElement('canvas');
 
     function createMondrian(containerId, seed, viewport = null, cb = null) {
       const vp = viewport || { x: 0, y: 0, zoom: 1 };
@@ -579,7 +581,17 @@
     ];
 
     function renderSequentially(index = 0) {
-      if (index >= renderQueue.length) return;
+      if (index >= renderQueue.length) {
+        tiledResultCanvas.width = FULL_WIDTH * 2;
+        tiledResultCanvas.height = FULL_HEIGHT * 2;
+        const resCtx = tiledResultCanvas.getContext('2d');
+        for (let i = 0; i < 4; i++) {
+          const p5Canvas = document.querySelector(`#tile-${i} canvas`);
+          resCtx.drawImage(p5Canvas, 0, 0, FULL_WIDTH, FULL_HEIGHT,
+            FULL_WIDTH * (i % 2), FULL_HEIGHT * (i >= 2), FULL_WIDTH, FULL_HEIGHT);
+        }
+        return;
+      }
       const item = renderQueue[index];
       createMondrian(item.id, initialSeed, item.vp,
         () => renderSequentially(index + 1)
@@ -596,6 +608,17 @@
       link.download = `mondrian-${initialSeed}-${complexity}.png`;
       link.href = canvas.toDataURL();
       link.click();
+    }
+
+    function downloadBig() {
+      tiledResultCanvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `mondrian-${initialSeed}-${complexity}-big.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
     }
   </script>
 </body>
