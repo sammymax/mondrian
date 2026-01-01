@@ -53,7 +53,15 @@
   <script src="js/p5-1.11.11.min.js"></script>
   <script src="js/p5.brush.min.js"></script>
   <script>
-    // Logging helper with timestamp
+    // Get seed from URL or generate one
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialSeed = urlParams.get('seed') ? parseInt(urlParams.get('seed')) : Date.now();
+    const complexity = urlParams.get('complexity') ? parseFloat(urlParams.get('complexity')) : 1.0;
+    const tileLevel = urlParams.get('tile') ? parseInt(urlParams.get('tile')) : 0;
+    const numTiles = (tileLevel === 0) ? 1 : 2 * tileLevel * tileLevel;
+    let curTile = 0;
+    debugLog(`Initial seed=${initialSeed}; complexity=${complexity}; tile=${tileLevel}`);
+
     function debugLog(msg) {
       console.log(`[${new Date().toISOString()}] ${msg}`);
     }
@@ -63,15 +71,9 @@
     }
 
     function setProgress(amt) {
-      document.getElementById('progress').style.width = `${amt * 2400}px`;
+      const p = curTile / numTiles + amt / numTiles;
+      document.getElementById('progress').style.width = `${p * 2400}px`;
     }
-
-    // Get seed from URL or generate one
-    const urlParams = new URLSearchParams(window.location.search);
-    const initialSeed = urlParams.get('seed') ? parseInt(urlParams.get('seed')) : Date.now();
-    const complexity = urlParams.get('complexity') ? parseFloat(urlParams.get('complexity')) : 1.0;
-    const tileLevel = urlParams.get('tile') ? parseInt(urlParams.get('tile')) : 0;
-    debugLog(`Initial seed=${initialSeed}; complexity=${complexity}; tile=${tileLevel}`);
 
     const FULL_WIDTH = 2400;
     const FULL_HEIGHT = 1200;
@@ -469,7 +471,7 @@
             b.h + jitterH
           );
         }
-        setProgress(0.95 * (i + 1) / blocks.length);
+        setProgress(0.90 * (i + 1) / blocks.length);
         await nextFrame();
       }
       for (let i = 0; i < blocks.length; i++) await renderBlock(i);
@@ -521,7 +523,7 @@
           l.x2 + p.random(-0.3, 0.3),
           l.y2 + p.random(-0.3, 0.3)
         );
-        setProgress(0.95 + 0.05 * (i + 1) / lines.length);
+        setProgress(0.90 + 0.10 * (i + 1) / lines.length);
         await nextFrame();
       }
       for (let i = 0; i < lines.length; i++) await renderLine(i);
@@ -613,9 +615,10 @@
         container.style.gridTemplateColumns = `repeat(${cols}, ${tileW}px)`;
         container.style.lineHeight = '0';
 
+        curTile = 0;
         // Render each tile - canvases are added to container in grid order
         for (let row = 0; row < rows; row++) {
-          for (let col = 0; col < cols; col++) {
+          for (let col = 0; col < cols; col++, curTile++) {
             const vp = { x: col * tileW, y: row * tileH, zoom: zoom };
             await createMondrian(initialSeed, vp);
             debugLog(`Tile ${row},${col} complete`);
