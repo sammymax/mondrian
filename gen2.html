@@ -34,6 +34,7 @@
       color: white;
     }
     button:hover { background: #555; }
+    button:disabled  { cursor: initial; background: #444; color: gray }
     #seed { color: #666; font-size: 12px; }
   </style>
 </head>
@@ -46,7 +47,7 @@
   </div>
   <div id="canvas-container"></div>
   <div id="controls">
-    <button onclick="download()">Download PNG</button>
+    <button id="download" onclick="download()">Download PNG</button>
   </div>
   <div id="seed"></div>
 
@@ -594,7 +595,7 @@
     }
 
     async function renderAll() {
-      document.getElementById('controls').style.display = 'none';
+      document.getElementById('download').setAttribute("disabled", true);
       if (tileLevel === 0) {
         // No tiling - single canvas
         await createMondrian(initialSeed, null);
@@ -637,7 +638,7 @@
           }
         }
       }
-      document.getElementById('controls').style.display = 'flex';
+      document.getElementById('download').removeAttribute("disabled");
     }
     renderAll();
 
