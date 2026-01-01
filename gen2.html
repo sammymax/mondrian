@@ -21,7 +21,7 @@
     #header { width: 2400px; height: 30px; border: 2px white solid; box-sizing: content-box; }
     #progress { width: 0; height: 30px; position: absolute; background: #404040 }
     #title-wrapper { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; }
-    .controls { display: flex; gap: 12px; }
+    #controls { display: flex; gap: 12px; }
     button {
       padding: 10px 24px;
       font-size: 14px;
@@ -45,7 +45,7 @@
     </div>
   </div>
   <div id="canvas-container"></div>
-  <div class="controls">
+  <div id="controls">
     <button onclick="download()">Download PNG</button>
   </div>
   <div id="seed"></div>
@@ -594,6 +594,7 @@
     }
 
     async function renderAll() {
+      document.getElementById('controls').style.display = 'none';
       if (tileLevel === 0) {
         // No tiling - single canvas
         await createMondrian(initialSeed, null);
@@ -625,6 +626,7 @@
           }
         }
       }
+      document.getElementById('controls').style.display = 'flex';
     }
     renderAll();
 
