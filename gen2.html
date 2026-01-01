@@ -621,7 +621,18 @@
         for (let row = 0; row < rows; row++) {
           for (let col = 0; col < cols; col++, curTile++) {
             const vp = { x: col * tileW, y: row * tileH, zoom: zoom };
-            await createMondrian(initialSeed, vp);
+            const resWebGL = await createMondrian(initialSeed, vp);
+
+            // Browsers have a limit of ~16 WebGL contexts, so replace with 2D.
+            const res2D = document.createElement('canvas');
+            res2D.width = FULL_WIDTH;
+            res2D.height = FULL_WIDTH;
+            const ctx = res2D.getContext('2d');
+            ctx.drawImage(resWebGL, 0, 0);
+            container.replaceChild(res2D, resWebGL);
+            res2D.style.width = `${FULL_WIDTH / zoom}px`;
+            res2D.style.height = `${FULL_WIDTH / zoom}px`;
+
             debugLog(`Tile ${row},${col} complete`);
           }
         }
