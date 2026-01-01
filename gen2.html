@@ -17,6 +17,7 @@
     }
     h1 { color: white; font-weight: 300; letter-spacing: 0.1em; font-size: 1.2rem; text-align: center; }
     #canvas-container { border: 2px solid #555; box-shadow: 0 10px 40px rgba(0,0,0,0.5); line-height: 0; }
+    #canvas-container canvas { display: block; }
     #header { width: 2400px; height: 30px; border: 2px white solid; box-sizing: content-box; }
     #progress { width: 0; height: 30px; position: absolute; background: #404040 }
     #title-wrapper { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; }
@@ -44,14 +45,8 @@
     </div>
   </div>
   <div id="canvas-container"></div>
-  <h2 style="color: #888; font-size: 0.9rem; margin-top: 20px;">Tiled Rendering Test</h2>
-  <div style="display: grid; grid-template-columns: 1200px 1200px; border: 2px solid #555; line-height: 0;">
-    <div id="tile-00"></div>
-    <div id="tile-01"></div>
-  </div>
   <div class="controls">
     <button onclick="download()">Download PNG</button>
-    <button onclick="downloadBig()">Download BIG PNG</button>
   </div>
   <div id="seed"></div>
 
@@ -75,18 +70,24 @@
     const urlParams = new URLSearchParams(window.location.search);
     const initialSeed = urlParams.get('seed') ? parseInt(urlParams.get('seed')) : Date.now();
     const complexity = urlParams.get('complexity') ? parseFloat(urlParams.get('complexity')) : 1.0;
-    debugLog(`Initial seed=${initialSeed}; complexity=${complexity}`);
+    const tileLevel = urlParams.get('tile') ? parseInt(urlParams.get('tile')) : 0;
+    debugLog(`Initial seed=${initialSeed}; complexity=${complexity}; tile=${tileLevel}`);
 
-    // viewport: { x, y, w, h } - the slice to render. If null, renders the full canvas.
     const FULL_WIDTH = 2400;
     const FULL_HEIGHT = 1200;
-    const tiledResultCanvas = document.createElement('canvas');
+    const container = document.getElementById('canvas-container');
 
-    async function createMondrian(containerId, seed, viewport = null) {
+    // Render and add canvas to container. Returns the canvas element.
+    async function createMondrian(seed, viewport = null) {
       const vp = viewport || { x: 0, y: 0, zoom: 1 };
-      vp.w = Math.floor(FULL_WIDTH / vp.zoom);
-      vp.h = Math.floor(FULL_HEIGHT / vp.zoom);
-      if (vp.zoom > 1) vp.h *= 2;  // Tiled rendering uses squares.
+      if (!viewport) {
+        vp.w = FULL_WIDTH;
+        vp.h = FULL_HEIGHT;
+      } else {
+        // Tiled: tile=N gives (2*N) x N tiles, each 1200/N x 1200/N logical pixels
+        vp.w = Math.floor(FULL_WIDTH / vp.zoom);
+        vp.h = Math.floor(FULL_WIDTH / vp.zoom);
+      }
 
       // Calculate padded render region (clamped to full canvas bounds)
       const render = {
@@ -102,6 +103,7 @@
       return new Promise((resolve) => { new p5((p) => {
 
     let swirlShader;
+    let canvas;
 
     const swirlVert = `
       attribute vec3 aPosition;
@@ -227,11 +229,10 @@
     `;
     
     p.setup = function() {
-      debugLog('Setup started for ' + containerId + ' viewport: ' + JSON.stringify(vp) + ' render: ' + JSON.stringify(render));
+      debugLog('Setup started: viewport=' + JSON.stringify(vp) + ' render=' + JSON.stringify(render));
       p.pixelDensity(vp.zoom);
-      // Canvas size is the padded render size (we'll crop after)
-      let canvas = p.createCanvas(render.w, render.h, p.WEBGL);
-      canvas.parent(containerId);
+      canvas = p.createCanvas(render.w, render.h, p.WEBGL);
+      canvas.parent(container);
 
       // Create shader
       swirlShader = p.createShader(swirlVert, swirlFrag);
@@ -563,58 +564,108 @@
       pg.remove();
       debugLog('Swirl shader applied');
       */
-      resolve();
+      resolve(canvas.elt);
     }
 
     }); }); // end p5 instance, end Promise
     } // end createMondrian
 
-    // Render queue - full canvas first, then tiles
-    // Full render must be first to initialize p5.brush with full canvas dimensions.
-    // The brush library's FF.create() and scaleBrushes() only run once, using
-    // the first canvas's dimensions (see p5-brush.index.js:136-141).
-    const renderQueue = [
-      { id: 'canvas-container', vp: null },  // Full render (no viewport)
-      { id: 'tile-00', vp: { x: 0, y: 0, zoom: 2 } },
-      { id: 'tile-01', vp: { x: 1200, y: 0, zoom: 2 } },
-    ];
+    // Lightweight initialization of p5.brush without rendering
+    function initBrush() {
+      return new Promise((resolve) => {
+        new p5((p) => {
+          p.setup = function() {
+            debugLog('Initializing p5.brush...');
+            p.pixelDensity(1);
+            let canvas = p.createCanvas(FULL_WIDTH, FULL_HEIGHT, p.WEBGL);
+            brush.instance(p);
+            brush.load();
+            p.noLoop();
+            debugLog('p5.brush initialized');
+            // Remove the init canvas immediately
+            canvas.remove();
+            p.remove();
+            resolve();
+          };
+        });
+      });
+    }
 
     async function renderAll() {
-      for (let index = 0; index < renderQueue.length; index++) {
-        const item = renderQueue[index];
-        await createMondrian(item.id, initialSeed, item.vp);
-      }
-      tiledResultCanvas.width = FULL_WIDTH * 2;
-      tiledResultCanvas.height = FULL_HEIGHT * 2;
-      const resCtx = tiledResultCanvas.getContext('2d');
-      for (let i = 0; i < 1; i++) {
-        for (let j = 0; j < 2; j++) {
-          const p5Canvas = document.querySelector(`#tile-${i}${j} canvas`);
-          resCtx.drawImage(p5Canvas, 0, 0, FULL_WIDTH, FULL_WIDTH,
-            FULL_WIDTH * j, FULL_WIDTH * i, FULL_WIDTH, FULL_WIDTH);
+      if (tileLevel === 0) {
+        // No tiling - single canvas
+        await createMondrian(initialSeed, null);
+      } else {
+        // Tiled rendering: tile=N gives (2*N) x N tiles at Nx resolution
+        const zoom = 2 * tileLevel;
+        const cols = zoom;
+        const rows = tileLevel;
+        const tileW = FULL_WIDTH / cols;
+        const tileH = FULL_HEIGHT / rows;
+
+        debugLog(`Tiled render: zoom=${zoom}, cols=${cols}, rows=${rows}, tileSize=${tileW}x${tileH}`);
+
+        // Initialize p5.brush with full canvas dimensions
+        await initBrush();
+
+        // Setup CSS grid on container for tile layout
+        container.style.display = 'grid';
+        container.style.gridTemplateColumns = `repeat(${cols}, ${tileW}px)`;
+        container.style.lineHeight = '0';
+
+        // Render each tile - canvases are added to container in grid order
+        for (let row = 0; row < rows; row++) {
+          for (let col = 0; col < cols; col++) {
+            const vp = { x: col * tileW, y: row * tileH, zoom: zoom };
+            await createMondrian(initialSeed, vp);
+            debugLog(`Tile ${row},${col} complete`);
+          }
         }
       }
     }
     renderAll();
 
     function download() {
-      // Download from first canvas
-      let canvas = document.querySelector('#canvas-container canvas');
-      let link = document.createElement('a');
-      link.download = `mondrian-${initialSeed}-${complexity}.png`;
-      link.href = canvas.toDataURL();
-      link.click();
-    }
+      const suffix = tileLevel > 0 ? `-tile${tileLevel}` : '';
+      const canvases = container.querySelectorAll('canvas');
 
-    function downloadBig() {
-      tiledResultCanvas.toBlob(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `mondrian-${initialSeed}-${complexity}-big.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }, 'image/png');
+      if (canvases.length === 1) {
+        // Single canvas - download directly
+        canvases[0].toBlob(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `mondrian-${initialSeed}-${complexity}${suffix}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }, 'image/png');
+      } else {
+        // Multiple canvases - composite them
+        const zoom = 2 * tileLevel;
+        const cols = zoom;
+        const tileW = FULL_WIDTH / cols;
+        const tileH = FULL_HEIGHT / tileLevel;
+
+        const result = document.createElement('canvas');
+        result.width = FULL_WIDTH * zoom;
+        result.height = FULL_HEIGHT * zoom;
+        const ctx = result.getContext('2d');
+
+        canvases.forEach((c, i) => {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          ctx.drawImage(c, col * tileW * zoom, row * tileH * zoom);
+        });
+
+        result.toBlob(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `mondrian-${initialSeed}-${complexity}${suffix}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }, 'image/png');
+      }
     }
   </script>
 </body>
